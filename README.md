@@ -41,10 +41,12 @@ This is a header-only library. To use it, simply add to your C++ source:
 There is a CMake configuration to build and run tests:
 
     cmake -S . -B build -D CMAKE_BUILD_TYPE=Debug -D USE_LTO=OFF
-    cmake --build build -v -j `nproc`
+    cmake --build build -j `nproc`
     cmake --build build -t test
 
 ## Documentation
+
+    cmake --build build -t doc doxygen
 
 There are some Markdown documents, for example, this text. If CMake finds
 a program for converting Markdown to HTML (`markdown` or `markdown_py`), it
