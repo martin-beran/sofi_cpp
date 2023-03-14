@@ -32,8 +32,9 @@ My older experiments regarding to the SOFI model:
 
 ## Using the library
 
-This is a header-only library. To use it, include
-[src/soficpp/soficpp.hpp](soficpp/soficpp.hpp).
+This is a header-only library. To use it, simply add to your C++ source:
+
+    #include "soficpp/soficpp.hpp"
 
 ## Building and running tests
 

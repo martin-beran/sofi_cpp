@@ -131,9 +131,10 @@ if (MARKDOWN)
         set(DST "${CMAKE_CURRENT_BINARY_DIR}/${FILE}.html")
         add_custom_command(
             OUTPUT ${DST}
-            COMMAND sed
-                "'1s:index.html:html/index.html:;1,/^[^[]*$$/s/\.md$$/.html/'"
-                ${SRC} | ${MARKDOWN} > ${DST}
+            COMMAND
+                sed '1,/^[^[]*$$/s%.Doxygen.: index.html%[Doxygen]: html/index.html%' ${SRC} |
+                sed '1,/^[^[]*$$/s%\.md$$%.html%' |
+                ${MARKDOWN} > ${DST}
             MAIN_DEPENDENCY ${SRC}
         )
         target_sources(doc PRIVATE ${DST})
