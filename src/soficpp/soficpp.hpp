@@ -8,4 +8,9 @@
 
 //! The top-level namespace of the SOFI C++ library
 namespace soficpp {
+
+//! Internal declarations used by the implementation
+namespace impl {
+} // namespace impl
+
 } // namespace soficpp

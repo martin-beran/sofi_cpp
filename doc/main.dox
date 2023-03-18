@@ -1,0 +1,112 @@
+/*! \mainpage SOFI C++
+
+\tableofcontents
+
+\section SOFI_principles The main principles of the SOFI security model
+
+SOFI is an abbreviation for <em>Subjects and Objects with Floating
+Integrity</em>. The name is derived from the main idea of restricting
+allowed interactions of entities, called \e subjects and \e objects,
+according to their \e integrity, which comprises security-relevant
+properties of the entities. The integrity of an entity is not fixed. It
+changes dynamically, depending on interactions with other entities.
+
+\section SOFI_system SOFI system
+
+A <em>SOFI system</em> consists of the SOFI engine, entities, and the database
+containing integtities of all entities and rules needed for making security
+decisions, for example, ACLs (Access Control Lists). The <em>SOFI engine</em>
+controls all operations performed by entities of the SOFI system and enforces
+its rules. The engine has full rights and is not restricted by the SOFI rules.
+
+The complete SOFI system implementation is contained in namespace \ref soficpp.
+The main include file is soficpp.hpp.
+
+\section SOFI_entities_ops Entities and operations
+
+<ul>
+<li>\e Entity -- a part of a system that participates in an operation.
+It can be one of:
+    <ul>
+    <li>\e Subject -- the active entity in an operation. It is the initiator of
+    the operation, for example, a process in a operating system invoking
+    a system call.
+    <li>\e Object -- the passive entity in an operation. It is the target of
+    the operation, for example, a file being read or written by a process
+    (which is the subject of the read/write operation).
+    </ul>
+<li>\e Operation -- any access or action performed by a subject on an object.
+Rules of the SOFI model are evaluated before each operation and either permit,
+or deny execution of the operation. According to the direction of the
+information flow, an operation can be one of:
+    <ul>
+    <li><em>Read operation</em> -- information flows from the object to the
+    subject, that is, the subject fetches information from the object. For
+    example, reading from a file.
+    <li><em>Write operation</em> -- information flows from the subject to the
+    object, that is, the subject changes the state of the object. For example,
+    writing to a file.
+    <li><em>Read-write operation</em> -- a combination of read and write.
+    Information flows in both direction between the subject and the object. The
+    subject changes the state of the object, and retrieves some information
+    from it at the same time. For example, processing of a POST HTTP request
+    sent from a client (the subject) to a server (the object). The request
+    triggers some processing on the server and it also sends some data back to
+    the client.
+    </ul>
+</ul>
+
+File entity.hpp contains declarations related to entities. File operation.hpp
+contains declarations related to operations.
+
+\section SOFI_integrity Integrity
+
+Each entity in the SOFI model has an attached \e integrity. It can be viewed as
+an abstract representation of a set of security-relevant features of the
+entity. From the perspective of the SOFI engine, an interpretation of the
+integrity value does not matter. Each implementation of the SOFI model can
+choose a set of possible integrity values, their representation and
+interpretation.
+
+The only restriction is that the set of integrity values must be a <a
+href="https://en.wikipedia.org/wiki/Lattice_(order)"><em>lattice</em></a>:
+
+\arg It is a partially ordered set.
+\arg Each two elements have a \e join (supremum, least upper bound).
+\arg Each two elements have a \e meet (infimum, greatest lower bound).
+
+In addition, we require a <em>bounded lattice</em>, which is a lattice with two
+added conditions:
+
+\arg There is a \e maximum (greatest element)
+\arg There is a \e minimum (least element)
+
+The set of integrity values can be either finite (e.g., an integrity is
+a set of values taken from a fixed enumeration), or (potentially) infinite
+(e.g., an integrity is a set of arbitrary numbers of strings). Note that every
+non-empty finite lattice is bounded.
+
+A concrete representation of a single integrity value can be a set of atomic
+<em>integrity attributes</em>, represented, for example, by a bitmap or by
+a list of names of attibutes. The set of all integrity values is then the power
+set (the set of all subsets) of the set of integrity attributes. The operations
+join and meet and the order relation are implemented by set union and
+itersection, and by the subset relation, respectivelly.
+
+File integrity.hpp contains declarations related to storage, testing, and
+updating integrity values.
+
+\section SOFI_rules Rules for permitting operations
+
+ACL, minimum integrity, functions for testing, providing, and accepting
+integrity
+
+File operation.hpp contains declarations related to evaluating SOFI rules and
+executing operations.
+
+\section SOFI_confidentiality Confidentiality
+
+\section SOFI_distributed DiSOFI (Distributed SOFI)
+
+Agent, message, export, import
+*/

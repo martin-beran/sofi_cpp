@@ -1,11 +1,13 @@
 # Link Boost::Test library to test programs
 link_libraries(
+    soficpp
     Threads::Threads
 )
 
 set(
     TEST_PROGRAMS
     dummy_boost
+    integrity
 )
 
 foreach (P ${TEST_PROGRAMS})
