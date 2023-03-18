@@ -11,9 +11,8 @@
 
 //! The top-level namespace of the SOFI C++ library
 namespace soficpp {
+} // namespace soficpp
 
 //! Internal declarations used by the implementation
-namespace impl {
+namespace soficpp::impl {
 } // namespace impl
-
-} // namespace soficpp

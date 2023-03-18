@@ -5,7 +5,7 @@
  */
 
 //! \cond
-#include "soficpp/integrity.hpp"
+#include "soficpp/soficpp.hpp"
 #include <stdexcept>
 
 #define BOOST_TEST_MODULE integrity
@@ -34,11 +34,31 @@ BOOST_AUTO_TEST_CASE(integrity_single)
     BOOST_TEST(s2 == s);
 }
 
+namespace {
+
 enum class integrity_value: int {
     minimum,
     middle,
     maximum,
 };
+
+} // namespace
+
+SOFICPP_IMPL_ENUM_STR_INIT(integrity_value) {
+    SOFICPP_IMPL_ENUM_STR_VAL(integrity_value, minimum),
+    SOFICPP_IMPL_ENUM_STR_VAL(integrity_value, middle),
+    SOFICPP_IMPL_ENUM_STR_VAL(integrity_value, maximum),
+};
+
+namespace {
+
+std::ostream& operator<<(std::ostream& os, integrity_value v)
+{
+    os << soficpp::enum2str(v);
+    return os;
+}
+
+} // namespace
 //! \endcond
 
 /*! \file

@@ -6,6 +6,8 @@
  * \test in file test_integrity.cpp
  */
 
+#include "soficpp/enum_str.hpp"
+
 #include <compare>
 #include <concepts>
 #include <ostream>
@@ -188,7 +190,7 @@ inline std::ostream& operator<<(std::ostream& os, const integrity_linear<T, Min,
 template <class T, T Min, T Max> requires std::is_enum_v<T>
 inline std::ostream& operator<<(std::ostream& os, const integrity_linear<T, Min, Max>& i)
 {
-    os << static_cast<std::underlying_type_t<T>>(i.value());
+    os << enum2str(i.value());
     return os;
 }
 
