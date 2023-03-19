@@ -13,7 +13,10 @@
 #include <compare>
 #include <concepts>
 #include <ostream>
+#include <sstream>
+#include <set>
 #include <type_traits>
+#include <variant>
 
 namespace soficpp {
 
@@ -289,18 +292,188 @@ private:
     }
 };
 
+static_assert(integrity<integrity_bitset<10>>);
+
 namespace impl {
 
 //! A type that may be used as the parameter of template integrity_set
 /*! \tparam T a set element type */
 template <class T> concept integrity_set_value =
-    (std::is_integral_v<T> || std::is_enum_v<T>) &&
     std::default_initializable<T> && std::destructible<T> &&
-    std::copy_constructible<T> && std::assignable_from<T&, T>;
+    std::copy_constructible<T> && std::assignable_from<T&, T> &&
+    std::equality_comparable<T>;
 
 } // namespace impl
 
+//! An integrity type that uses a set of values as an integrity value
+/*! The values are partially ordered using the subset relation. The lattice
+ * operation join and meet are set union and intersection, respectively. The
+ * least element is the empty set. the greatest element is the special value
+ * \ref universe, representing a set containing all possible values.
+ * \tparam T the type of elements of an integrity value
+ * \test in file test_integrity.cpp */
 template <impl::integrity_set_value T> class integrity_set {
+public:
+    //! An empty structure representing the maximum integrity
+    /*! It is treated as strictly greater than any subset of values of type \a
+     * T. Even if the number of possible values of \a T, an hence the number of
+     * its subsets, is finite, \ref universe is still strictly greater than a
+     * set explicitly enumerating all values of \a T. */
+    struct universe {};
+    //! The type of values that are not equal to \ref universe
+    using set_t = std::set<T>; 
+    //! The type used to store the integrity value
+    using value_type = std::variant<set_t, universe>;
+    //! Default constructor, creates the empty set.
+    constexpr integrity_set() = default;
+    //! Creates an integrity from a value_type.
+    /*! \param[in] value the value of the integrity */
+    explicit integrity_set(value_type value): val(std::move(value)) {}
+    //! Creates an integrity from a set_t.
+    /*! The created set will have a value different from max().
+     * \param[in] value the value of the integrity */
+    explicit integrity_set(set_t value): val(std::move(value)) {}
+    //! Creates an integrity equal to max()
+    /*! \param[in] value the \ref universe value */
+    explicit integrity_set(universe value): val(value) {}
+    //! Compares the sets for equality.
+    /*! The inequality operator is automatically generated.
+     * \param[in] i compared integrity value
+     * \return whether the two integrities are either equal sets, or both \ref
+     * universe */
+    bool operator==(const integrity_set& i) const {
+        if (std::holds_alternative<universe>(val))
+            return std::holds_alternative<universe>(i.val);
+        else if (std::holds_alternative<universe>(i.val))
+            return false;
+        else
+            return std::get<set_t>(val) == std::get<set_t>(i.val);
+    }
+    //! Checks if one integrity is a subset of the other.
+    /*! Value \ref universe is treated as equal to itself and a proper superset
+     * of any set_t.
+     * \param[in] i compared integrity value
+     * \return the subset relation of the two integrities */
+    std::partial_ordering operator<=>(const integrity_set& i) const {
+        if (std::holds_alternative<universe>(val)) {
+            if (std::holds_alternative<universe>(i.val))
+                return std::partial_ordering::equivalent;
+            else
+                return std::partial_ordering::greater;
+        } else if (std::holds_alternative<universe>(i.val))
+            return std::partial_ordering::less;
+        else {
+            const auto& v_set = std::get<set_t>(val);
+            const auto& i_set = std::get<set_t>(i.val);
+            bool v_subset_of_i = true;
+            bool i_subset_of_v = true;
+            for (const auto& v: v_set)
+                if (!i_set.contains(v)) {
+                    v_subset_of_i = false;
+                    break;
+                }
+            for (const auto& i: i_set)
+                if (!v_set.contains(i)) {
+                    i_subset_of_v = false;
+                    break;
+                }
+            if (v_subset_of_i) {
+                if (i_subset_of_v)
+                    return std::partial_ordering::equivalent;
+                else
+                    return std::partial_ordering::less;
+            } else {
+                if (i_subset_of_v)
+                    return std::partial_ordering::greater;
+                else
+                    return std::partial_ordering::unordered;
+            }
+        }
+    }
+    //! The lattice join operation
+    /*! The join of \ref universe with anything is \ref universe.
+     * \param[in] i an integrity value
+     * \return the union of the two sets */
+    integrity_set operator+(const integrity_set& i) const {
+        if (std::holds_alternative<universe>(val) || std::holds_alternative<universe>(i.val))
+            return universe{};
+        integrity_set result{};
+        for (const auto& v: std::get<set_t>(val))
+            result.insert(v);
+        for (const auto& i: std::get<set_t>(i.val))
+            result.insert(i);
+        return result;
+    }
+    //! The lattice meet operation
+    /*! The meet of \ref universe with anything is the other value.
+     * \param[in] i an integrity value
+     * \return the intesection of the two sets */
+    integrity_set operator*(const integrity_set& i) const {
+        if (std::holds_alternative<universe>(val))
+            return i;
+        if (std::holds_alternative<universe>(i.val))
+            return *this;
+        integrity_set result{};
+        const auto& v_set = std::get<set_t>(val);
+        const auto& i_set = std::get<set_t>(i.val);
+        const auto& set1 = v_set.size() < i_set.size() ? v_set : i_set;
+        const auto& set2 = v_set.size() < i_set.size() ? i_set : v_set;
+        // interate over the smaller set in O(n), test membership in the greater set in O(log(n))
+        for (const auto& v: set1)
+            if (set2.contains(v))
+                result.insert(v);
+        return result;
+    }
+    //! The lattice minimum
+    /*! \return the empty set */
+    static constexpr integrity_set min() {
+        return integrity_set{};
+    }
+    //! The lattice maximum
+    /*! \return \ref universe */
+    static constexpr integrity_set max() {
+        return integrity_set{universe{}};
+    }
+    //! Gets the underlying set
+    /*! \return the set */
+    constexpr const value_type& value() const noexcept {
+        return val;
+    }
+    //! Converts the value to a string.
+    /*! It uses stream operator \c << for creating strings from set values.
+     * \return a comma-separated list of string representations of individual
+     * set values, in the order defined by set_t, enclosed in braces, or the
+     * string \c "universe" */
+    std::string to_string() const {
+        std::ostringstream os;
+        os << *this;
+        return os.str();
+    }
+private:
+    //! The value of this integrity
+    value_type val{};
+    //! Output of an integrity_set value
+    /*! \param[in] os an output stream
+     * \param[in] i an integrity value
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const integrity_set& i) {
+        if (std::holds_alternative<universe>) {
+            os << "universe";
+        } else {
+            os << '{';
+            for (bool first = true; auto&& v: std::get<set_t>(i.val)) {
+                if (first)
+                    first = false;
+                else
+                    os << ',';
+                os << v;
+            }
+            os << '}';
+        }
+        return os;
+    }
 };
+
+static_assert(integrity<integrity_set<std::string>>);
 
 } // namespace soficpp
