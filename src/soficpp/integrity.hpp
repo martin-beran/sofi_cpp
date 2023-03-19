@@ -129,27 +129,27 @@ public:
     /*! \param[in] i an integrity value
      * \return the maximum of the arguments */
     constexpr integrity_linear operator+(const integrity_linear& i) const noexcept {
-        return std::max(val, i.val);
+        return integrity_linear{std::max(val, i.val)};
     }
     //! The lattice meet operation
     /*! \param[in] i an integrity value
      * \return the minimum of the arguments */
     constexpr integrity_linear operator*(const integrity_linear& i) const noexcept {
-        return std::min(val, i.val);
+        return integrity_linear{std::min(val, i.val)};
     }
     //! The lattice minimum
     /*! \return \c integrity_linear(Min) */
     static constexpr integrity_linear min() noexcept {
-        return Min;
+        return integrity_linear{Min};
     }
     //! The lattice maximum
     /*! \return \c integrity_linear(Max) */
     static constexpr integrity_linear max() noexcept {
-        return Max;
+        return integrity_linear{Max};
     }
     //! Gets the underlying integrity value
     /*! \return the value */
-    constexpr T value() noexcept {
+    constexpr T value() const noexcept {
         return val;
     }
 private:
