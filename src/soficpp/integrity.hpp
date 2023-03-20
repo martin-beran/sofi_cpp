@@ -303,6 +303,34 @@ template <class T> concept integrity_set_value =
     std::copy_constructible<T> && std::assignable_from<T&, T> &&
     std::equality_comparable<T>;
 
+//! Helper declarations for soficpp::integrity_set
+/*! \note These declarations are not contained in class soficpp::integrity_set,
+ * because then argument deduction of \c operator<<() for
+ * soficpp::integrity_set::value_type would not work. */
+namespace integrity_set {
+
+//! An empty structure representing the maximum integrity of integrity_set
+/*! It is treated as strictly greater than any subset of values of type \a
+ * T. Even if the number of possible values of \a T, an hence the number of
+ * its subsets, is finite, \ref universe is still strictly greater than a
+ * set explicitly enumerating all values of \a T. */
+struct universe {
+    //! Equality of \ref universe values
+    /*! \param[in] u another value
+     * \return always \c true */
+    constexpr bool operator==([[maybe_unused]] const universe& u) const = default;
+};
+
+//! The type of integrity_set values that are not equal to \ref universe
+/*! \tparam T the type of elements of an soficpp::integrity_set value */
+template <impl::integrity_set_value T> using set_t = std::set<T>;
+
+//! The type used to store the integrity_set value
+/*! \tparam T the type of elements of an soficpp::integrity_set value */
+template <impl::integrity_set_value T> using value_type = std::variant<set_t<T>, universe>;
+
+} // namespace integrity_set
+
 } // namespace impl
 
 //! An integrity type that uses a set of values as an integrity value
@@ -315,13 +343,10 @@ template <class T> concept integrity_set_value =
 template <impl::integrity_set_value T> class integrity_set {
 public:
     //! An empty structure representing the maximum integrity
-    /*! It is treated as strictly greater than any subset of values of type \a
-     * T. Even if the number of possible values of \a T, an hence the number of
-     * its subsets, is finite, \ref universe is still strictly greater than a
-     * set explicitly enumerating all values of \a T. */
-    struct universe {};
+    using universe = impl::integrity_set::universe;
+    static_assert(universe{} == universe{});
     //! The type of values that are not equal to \ref universe
-    using set_t = std::set<T>; 
+    using set_t = impl::integrity_set::set_t<T>;
     //! The type used to store the integrity value
     using value_type = std::variant<set_t, universe>;
     //! Default constructor, creates the empty set.
@@ -396,12 +421,13 @@ public:
      * \return the union of the two sets */
     integrity_set operator+(const integrity_set& i) const {
         if (std::holds_alternative<universe>(val) || std::holds_alternative<universe>(i.val))
-            return universe{};
+            return integrity_set{universe{}};
         integrity_set result{};
+        auto& r = std::get<set_t>(result.val);
         for (const auto& v: std::get<set_t>(val))
-            result.insert(v);
+            r.insert(v);
         for (const auto& i: std::get<set_t>(i.val))
-            result.insert(i);
+            r.insert(i);
         return result;
     }
     //! The lattice meet operation
@@ -414,6 +440,7 @@ public:
         if (std::holds_alternative<universe>(i.val))
             return *this;
         integrity_set result{};
+        auto& r = std::get<set_t>(result.val);
         const auto& v_set = std::get<set_t>(val);
         const auto& i_set = std::get<set_t>(i.val);
         const auto& set1 = v_set.size() < i_set.size() ? v_set : i_set;
@@ -421,7 +448,7 @@ public:
         // interate over the smaller set in O(n), test membership in the greater set in O(log(n))
         for (const auto& v: set1)
             if (set2.contains(v))
-                result.insert(v);
+                r.insert(v);
         return result;
     }
     //! The lattice minimum
@@ -452,28 +479,51 @@ public:
 private:
     //! The value of this integrity
     value_type val{};
-    //! Output of an integrity_set value
-    /*! \param[in] os an output stream
-     * \param[in] i an integrity value
-     * \return \a os */
-    friend std::ostream& operator<<(std::ostream& os, const integrity_set& i) {
-        if (std::holds_alternative<universe>) {
-            os << "universe";
-        } else {
-            os << '{';
-            for (bool first = true; auto&& v: std::get<set_t>(i.val)) {
-                if (first)
-                    first = false;
-                else
-                    os << ',';
-                os << v;
-            }
-            os << '}';
-        }
-        return os;
-    }
+    //! Friend, needs access to \ref val.
+    template <class IST>
+    friend std::ostream& operator<<(std::ostream& os, const integrity_set<IST>& i);
 };
 
 static_assert(integrity<integrity_set<std::string>>);
+
+namespace impl::integrity_set {
+
+//! Output of a value_type value
+/*! \tparam T the type of elements of an integrity value
+ * \param[in] os an output stream
+ * \param[in] val a value
+ * \return \a os */
+template <class T>
+std::ostream& operator<<(std::ostream& os, const typename integrity_set::value_type<T>& val)
+{
+    if (std::holds_alternative<universe>(val)) {
+        os << "universe";
+    } else {
+        os << '{';
+        for (bool first = true; auto&& v: std::get<set_t<T>>(val)) {
+            if (first)
+                first = false;
+            else
+                os << ',';
+            os << v;
+        }
+        os << '}';
+    }
+    return os;
+}
+
+} // namespace impl::integrity_set
+
+//! Output of an integrity_set value
+/*! \tparam T the type of elements of an integrity value
+ * \param[in] os an output stream
+ * \param[in] i an integrity value
+ * \return \a os */
+template <class T>
+std::ostream& operator<<(std::ostream& os, const integrity_set<T>& i)
+{
+    os << i.val;
+    return os;
+}
 
 } // namespace soficpp
