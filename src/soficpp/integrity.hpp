@@ -44,12 +44,6 @@ template <class T> concept bounded_lattice =
         { T::max() } -> std::same_as<T>; // maximum
     };
 
-//! A helper concept for soficpp::integrity
-/*! \tparam V an integrity value type
- * \tparam T an integrity type */
-template <class V, class T> concept returns_value_or_const_reference =
-    std::is_same_v<V, typename T::value_type> || std::is_same_v<V, const typename T::value_type&>;
-
 } // namespace impl
 
 //! Requirements for a class representing an integrity value.
@@ -60,18 +54,13 @@ template <class T> concept integrity =
     std::copy_constructible<T> && std::assignable_from<T&, T> &&
     requires (const T i) {
         typename T::value_type;
-        { i.value() } -> impl::returns_value_or_const_reference<T>;
+        { i.value() } -> std::same_as<const typename T::value_type&>;
     };
 
 //! The simplest integrity type containing just a single integrity value
 /*! \test in file test_integrity.cpp */
 class integrity_single {
 public:
-    //! Converts the value to a string
-    /*! \return a fixed string representing the integrity value */
-    static std::string to_string() {
-        return "{}";
-    }
     //! There is no internal value
     struct value_type {
         //! All values are equal.
@@ -80,14 +69,11 @@ public:
          * \param[in] i compared value
          * \return std::strong_ordering */
         constexpr auto operator<=>(const value_type& i) const noexcept = default;
-        // Output of a value_type value
-        /*! It outputs a fixed string representing the integrity value.
-         * \param[in] os an output stream
-         * \param[in] val a value
-         * \return \a os */
-        friend std::ostream& operator<<(std::ostream& os, [[maybe_unused]] const value_type& val) {
-            os << to_string();
-            return os;
+        //! Converts the value to a string
+        /*! \return a fixed string representing the integrity value */
+        [[nodiscard]] std::string to_string() const {
+            (void) this; // silence clang-tidy warnings about static member functions
+            return "{}";
         }
     };
     static_assert(std::is_same_v<decltype(value_type{} <=> value_type{}), std::strong_ordering>);
@@ -122,8 +108,25 @@ public:
     }
     //! Gets the underlying integrity value
     /*! \return the value */
-    constexpr value_type value() const noexcept {
-        return {};
+    [[nodiscard]] constexpr const value_type& value() const noexcept {
+        return val;
+    }
+    //! Converts the value to a string
+    /*! \return a fixed string representing the integrity value */
+    std::string to_string() {
+        return val.to_string();
+    }
+private:
+    //! The value of this integrity
+    value_type val;
+    // Output of a value_type value
+    /*! It outputs a fixed string representing the integrity value.
+     * \param[in] os an output stream
+     * \param[in] val a value
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const value_type& val) {
+        os << val.to_string();
+        return os;
     }
     //! Output of an integrity_single value
     /*! \param[in] os an output stream
@@ -201,18 +204,18 @@ public:
     }
     //! Gets the underlying integrity value
     /*! \return the value */
-    constexpr value_type value() const noexcept {
+    [[nodiscard]] constexpr const value_type& value() const noexcept {
         return val;
     }
     //! Converts the value to a string.
     /*! \return the numeric integrity value */
-    std::string to_string() const requires (!std::is_enum_v<value_type>) {
+    [[nodiscard]] std::string to_string() const requires (!std::is_enum_v<value_type>) {
         return std::to_string(val);
     }
     //! Converts the value to a string.
     /*! \return a string representation of the integrity value, created by
      * enum2str() */
-    std::string to_string() const requires std::is_enum_v<value_type> {
+    [[nodiscard]] std::string to_string() const requires std::is_enum_v<value_type> {
         return enum2str(val);
     }
 private:
@@ -306,14 +309,14 @@ public:
     }
     //! Gets the underlying set of bits
     /*! \return the set */
-    constexpr const value_type& value() const noexcept {
+    [[nodiscard]] constexpr const value_type& value() const noexcept {
         return val;
     }
     //! Converts the value to a string.
     /*! \return a string of \a N characters \c '0' for each bit not present in
      * the set and \c '1' for each bit of the set, in the order from bit 0 to
      * bit \a N - 1 */
-    std::string to_string() const {
+    [[nodiscard]] std::string to_string() const {
         std::string result = val.to_string();
         std::ranges::reverse(result);
         return result;
@@ -483,7 +486,7 @@ public:
     }
     //! Gets the underlying set
     /*! \return the set */
-    constexpr const value_type& value() const noexcept {
+    [[nodiscard]] constexpr const value_type& value() const noexcept {
         return val;
     }
     //! Converts the value to a string.
@@ -491,7 +494,7 @@ public:
      * \return a comma-separated list of string representations of individual
      * set values, in the order defined by set_t, enclosed in braces, or the
      * string \c "universe" */
-    std::string to_string() const {
+    [[nodiscard]] std::string to_string() const {
         std::ostringstream os;
         os << *this;
         return os.str();
@@ -623,12 +626,12 @@ public:
     }
     //! Gets the internal integrity
     /*! \return the internal integrity object */
-    const value_type& value() const noexcept {
+    [[nodiscard]] const value_type& value() const noexcept {
         return *val;
     }
     //! Converts the value to a string.
     /*! \return the string representation of the internal integrity object */
-    std::string to_string() const {
+    [[nodiscard]] std::string to_string() const {
         return val->to_string();
     }
 private:
