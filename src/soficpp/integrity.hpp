@@ -12,6 +12,7 @@
 #include <bitset>
 #include <compare>
 #include <concepts>
+#include <memory>
 #include <ostream>
 #include <sstream>
 #include <set>
@@ -525,5 +526,111 @@ std::ostream& operator<<(std::ostream& os, const integrity_set<T>& i)
     os << i.val;
     return os;
 }
+
+//! An integrity type that holds another integrity type and shares it when copied
+/*! It holds a shared pointer to an integrity object of type \a T internally.
+ * Copying an integrity_cow object copies only the pointer, not the target
+ * object. Moving from an integrity_cow object sets the internal object to \c
+ * nullptr, therefore after a move, it is not safe to access any member of the
+ * object (except calling the destructor).
+ * \tparam T the internal integrity type */
+template <integrity T> class integrity_shared {
+public:
+    //! A constructor creates the internal integrity object.
+    /*! Constructor arguments are forwarded to the constructor of the internal
+     * object.
+     * \param[in] a constructor arguments of integrity type \a T
+     * \throw any exception thrown by \c std::make_shared() or by the
+     * constructor of \a T */
+    template <class... Args> explicit integrity_shared(Args... a):
+        val{std::make_shared<T>(std::forward<Args>(a)...)} {}
+    //! A constructor that creates the internal object by move from an object of type \a T
+    /*! \param[in] i an integrity of type \a T */
+    explicit integrity_shared(T&& i): val{std::make_shared<T>(std::move(i))} {}
+    //! Compares the internal objects.
+    /*! \param[in] i compared integrity value
+     * \return whether the two integrities are equal */
+    bool operator==(const integrity_shared& i) const {
+        return *val == *i.val;
+    }
+    //! Compares the internal objects.
+    /*! \param[in] i compared integrity value
+     * \return the result of comparison, of the same type as returned by the
+     * three-way comparison operator of the internal objects */
+    auto operator<=>(const integrity_shared& i) const {
+        return *val <=> *i.val;
+    }
+    //! The lattice join operation
+    /*! It computes the join of the internal objects. If the result is the same
+     * as one of its arguments, it shares the internal object with that
+     * argument.
+     * \param[in] i an integrity value
+     * \return the result of join */
+    integrity_shared operator+(const integrity_shared& i) const {
+        T result = *val + *i.val;
+        if (result == *val)
+            return *this;
+        else if (result == *i.val)
+            return i;
+        else
+            return integrity_shared{std::move(result)};
+    }
+    //! The lattice meet operation
+    /*! It computes the meet of the internal objects. If the result is the same
+     * as one of its arguments, it shares the internal object with that
+     * argument.
+     * \param[in] i an integrity value
+     * \return the result of join */
+    integrity_shared operator*(const integrity_shared& i) const {
+        T result = *val * *i.val;
+        if (result == *val)
+            return *this;
+        else if (result == *i.val)
+            return i;
+        else
+            return integrity_shared{std::move(result)};
+    }
+    //! The lattice minimum
+    /*! It returns the minimum of integrity type \a T. All objects returned by
+     * this function share a single internal object.
+     * \return the minimum integrity */
+    static integrity_shared min() {
+        static std::shared_ptr<T> p = std::make_shared<T>(T::min());
+        return integrity_shared(p);
+    }
+    //! The lattice maximum
+    /*! It returns the maximum of integrity type \a T. All objects returned by
+     * this function share a single internal object.
+     * \return the maximum integrity */
+    static integrity_shared max() {
+        static std::shared_ptr<T> p = std::make_shared<T>(T::max());
+        return integrity_shared(p);
+    }
+    //! Gets the internal integrity
+    /*! \return the internal integrity object */
+    const T& value() const noexcept {
+        return *val;
+    }
+    //! Converts the value to a string.
+    /*! \return the string representation of the internal integrity object */
+    std::string to_string() const {
+        return val->to_string();
+    }
+private:
+    //! The constructor used internally by min() and max()
+    /*! It shares the internal object with \a p.
+     * \param[in] p a shared pointer to the internal object */
+    //! The value of this integrity, it is never \c nullptr.
+    std::shared_ptr<T> val;
+    //! Output of an integrity_shared value
+    /*! It calls \c operator<<() of the internal object.
+     * \param[in] os an output stream
+     * \param[in] i an integrity value
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const integrity_shared<T>& i) {
+        os << *i.val;
+        return os;
+    }
+};
 
 } // namespace soficpp
