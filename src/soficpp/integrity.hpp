@@ -533,9 +533,17 @@ std::ostream& operator<<(std::ostream& os, const integrity_set<T>& i)
  * object. Moving from an integrity_cow object sets the internal object to \c
  * nullptr, therefore after a move, it is not safe to access any member of the
  * object (except calling the destructor).
- * \tparam T the internal integrity type */
+ * \tparam T the internal integrity type
+ * \test in file test_integrity.cpp */
 template <integrity T> class integrity_shared {
 public:
+    //! The default constructor
+    /*! All objects created by this constructor share a single default
+     * constructed internal object. */
+    integrity_shared(): val(nullptr) {
+        static std::shared_ptr<T> p = std::make_shared<T>();
+        val = p;
+    }
     //! A constructor creates the internal integrity object.
     /*! Constructor arguments are forwarded to the constructor of the internal
      * object.
@@ -632,5 +640,7 @@ private:
         return os;
     }
 };
+
+static_assert(integrity<integrity_shared<integrity_set<std::string>>>);
 
 } // namespace soficpp

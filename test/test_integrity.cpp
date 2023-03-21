@@ -490,3 +490,20 @@ BOOST_AUTO_TEST_CASE(integrity_set)
     BOOST_TEST(i7 * i7 == i7);
 }
 //! \endcond
+
+/*! \file
+ * \test \c integrity_shared -- Thest of class soficpp::integrity_shared */
+//! \cond
+BOOST_AUTO_TEST_CASE(integrity_shared)
+{
+    using internal_t = soficpp::integrity_set<std::string>;
+    using integrity_t = soficpp::integrity_shared<internal_t>;
+    // default constructor
+    integrity_t i{};
+    BOOST_TEST(i.value() == internal_t());
+    {
+        integrity_t i2{};
+        BOOST_TEST(&i.value() == &i2.value());
+    }
+}
+//! \endcond
