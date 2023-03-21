@@ -638,7 +638,7 @@ private:
     //! The constructor used internally by min() and max()
     /*! It shares the internal object with \a p.
      * \param[in] p a shared pointer to the internal object */
-    integrity_shared(std::shared_ptr<value_type> p): val{p} {}
+    explicit integrity_shared(std::shared_ptr<value_type> p): val{p} {}
     //! The value of this integrity, it is never \c nullptr.
     std::shared_ptr<value_type> val;
     //! Output of an integrity_shared value
