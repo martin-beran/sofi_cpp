@@ -44,6 +44,12 @@ template <class T> concept bounded_lattice =
         { T::max() } -> std::same_as<T>; // maximum
     };
 
+//! A helper concept for soficpp::integrity
+/*! \tparam V an integrity value type
+ * \tparam T an integrity type */
+template <class V, class T> concept returns_value_or_const_reference =
+    std::is_same_v<V, typename T::value_type> || std::is_same_v<V, const typename T::value_type&>;
+
 } // namespace impl
 
 //! Requirements for a class representing an integrity value.
@@ -51,12 +57,31 @@ template <class T> concept bounded_lattice =
 template <class T> concept integrity =
     impl::bounded_lattice<T> &&
     std::default_initializable<T> && std::destructible<T> &&
-    std::copy_constructible<T> && std::assignable_from<T&, T>;
+    std::copy_constructible<T> && std::assignable_from<T&, T> &&
+    requires (const T i) {
+        typename T::value_type;
+        { i.value() } -> impl::returns_value_or_const_reference<T>;
+    };
 
 //! The simplest integrity type containing just a single integrity value
 /*! \test in file test_integrity.cpp */
 class integrity_single {
 public:
+    //! There is no internal value
+    struct value_type {
+        //! All values are equal.
+        /*! Defaulted three-way comparison automatically generates all other
+         * comparison operators.
+         * \param[in] i compared value
+         * \return std::strong_ordering */
+        constexpr auto operator<=>(const value_type& i) const noexcept = default;
+        friend std::ostream& operator<<(std::ostream& os, [[maybe_unused]] const value_type& val) {
+            os << "{}";
+            return os;
+        }
+    };
+    static_assert(std::is_same_v<decltype(value_type{} <=> value_type{}), std::strong_ordering>);
+    static_assert(value_type{} == value_type{});
     //! All integrity_single objects compare as equal.
     /*! Defaulted three-way comparison automatically generates all other
      * comparison operators.
@@ -85,6 +110,11 @@ public:
     static constexpr integrity_single max() noexcept {
         return {};
     }
+    //! Gets the underlying integrity value
+    /*! \return the value */
+    constexpr value_type value() const noexcept {
+        return {};
+    }
     //! Converts the value to a string
     /*! \return a fixed string representing the integrity value */
     std::string to_string() const {
@@ -103,6 +133,7 @@ public:
 
 static_assert(integrity<integrity_single>);
 static_assert(std::is_same_v<decltype(integrity_single{} <=> integrity_single{}), std::strong_ordering>);
+static_assert(integrity_single{} == integrity_single{});
 
 namespace impl {
 
@@ -123,13 +154,15 @@ template <class T> concept integrity_linear_value =
 template <impl::integrity_linear_value T, T Min, T Max> requires (Min <= Max)
 class integrity_linear {
 public:
+    //! The type used to store the integrity value
+    using value_type = T;
     //! Default constructor, sets the value to \a Min
     constexpr integrity_linear() noexcept: val(Min) {}
     //! Creates an integrity from a value of the underlying type.
     /*! \param[in] v the underlying integrity value
      * \throw std::invalid_argument if \a v does not belong to the interval
      * \<\a Min, \a Max\> */
-    explicit constexpr integrity_linear(T v): val(v) {
+    explicit constexpr integrity_linear(value_type v): val(v) {
         if (v < Min || v > Max)
             throw std::invalid_argument("Value out of range of integrity_linear");
     }
@@ -163,23 +196,23 @@ public:
     }
     //! Gets the underlying integrity value
     /*! \return the value */
-    constexpr T value() const noexcept {
+    constexpr value_type value() const noexcept {
         return val;
     }
     //! Converts the value to a string.
     /*! \return the numeric integrity value */
-    std::string to_string() const requires (!std::is_enum_v<T>) {
+    std::string to_string() const requires (!std::is_enum_v<value_type>) {
         return std::to_string(val);
     }
     //! Converts the value to a string.
     /*! \return a string representation of the integrity value, created by
      * enum2str() */
-    std::string to_string() const requires std::is_enum_v<T> {
+    std::string to_string() const requires std::is_enum_v<value_type> {
         return enum2str(val);
     }
 private:
     //! The value of this integrity
-    T val;
+    value_type val;
     //! Output of an integrity_linear value
     /*! \param[in] os an output stream
      * \param[in] i an integrity value
@@ -537,11 +570,13 @@ std::ostream& operator<<(std::ostream& os, const integrity_set<T>& i)
  * \test in file test_integrity.cpp */
 template <integrity T> class integrity_shared {
 public:
+    //! The type of the internal integrity object
+    using value_type = T;
     //! The default constructor
     /*! All objects created by this constructor share a single default
      * constructed internal object. */
     integrity_shared(): val(nullptr) {
-        static std::shared_ptr<T> p = std::make_shared<T>();
+        static std::shared_ptr<value_type> p = std::make_shared<value_type>();
         val = p;
     }
     //! A constructor creates the internal integrity object.
@@ -551,10 +586,10 @@ public:
      * \throw any exception thrown by \c std::make_shared() or by the
      * constructor of \a T */
     template <class... Args> explicit integrity_shared(Args... a):
-        val{std::make_shared<T>(std::forward<Args>(a)...)} {}
+        val{std::make_shared<value_type>(std::forward<Args>(a)...)} {}
     //! A constructor that creates the internal object by move from an object of type \a T
     /*! \param[in] i an integrity of type \a T */
-    explicit integrity_shared(T&& i): val{std::make_shared<T>(std::move(i))} {}
+    explicit integrity_shared(value_type&& i): val{std::make_shared<value_type>(std::move(i))} {}
     //! Compares the internal objects.
     /*! \param[in] i compared integrity value
      * \return whether the two integrities are equal */
@@ -575,7 +610,7 @@ public:
      * \param[in] i an integrity value
      * \return the result of join */
     integrity_shared operator+(const integrity_shared& i) const {
-        T result = *val + *i.val;
+        value_type result = *val + *i.val;
         if (result == *val)
             return *this;
         else if (result == *i.val)
@@ -590,7 +625,7 @@ public:
      * \param[in] i an integrity value
      * \return the result of join */
     integrity_shared operator*(const integrity_shared& i) const {
-        T result = *val * *i.val;
+        value_type result = *val * *i.val;
         if (result == *val)
             return *this;
         else if (result == *i.val)
@@ -603,7 +638,7 @@ public:
      * this function share a single internal object.
      * \return the minimum integrity */
     static integrity_shared min() {
-        static std::shared_ptr<T> p = std::make_shared<T>(T::min());
+        static std::shared_ptr<value_type> p = std::make_shared<value_type>(value_type::min());
         return integrity_shared(p);
     }
     //! The lattice maximum
@@ -611,12 +646,12 @@ public:
      * this function share a single internal object.
      * \return the maximum integrity */
     static integrity_shared max() {
-        static std::shared_ptr<T> p = std::make_shared<T>(T::max());
+        static std::shared_ptr<value_type> p = std::make_shared<value_type>(value_type::max());
         return integrity_shared(p);
     }
     //! Gets the internal integrity
     /*! \return the internal integrity object */
-    const T& value() const noexcept {
+    const value_type& value() const noexcept {
         return *val;
     }
     //! Converts the value to a string.
@@ -629,13 +664,13 @@ private:
     /*! It shares the internal object with \a p.
      * \param[in] p a shared pointer to the internal object */
     //! The value of this integrity, it is never \c nullptr.
-    std::shared_ptr<T> val;
+    std::shared_ptr<value_type> val;
     //! Output of an integrity_shared value
     /*! It calls \c operator<<() of the internal object.
      * \param[in] os an output stream
      * \param[in] i an integrity value
      * \return \a os */
-    friend std::ostream& operator<<(std::ostream& os, const integrity_shared<T>& i) {
+    friend std::ostream& operator<<(std::ostream& os, const integrity_shared<value_type>& i) {
         os << *i.val;
         return os;
     }

@@ -19,6 +19,7 @@ BOOST_AUTO_TEST_CASE(integrity_single)
 {
     // default constructor
     soficpp::integrity_single s{};
+    BOOST_TEST(s.value() == soficpp::integrity_single::value_type{});
     // conversion to string and output to stream
     BOOST_TEST(s.to_string() == "{}");
     std::ostringstream os;
@@ -505,5 +506,7 @@ BOOST_AUTO_TEST_CASE(integrity_shared)
         integrity_t i2{};
         BOOST_TEST(&i.value() == &i2.value());
     }
+    // constructed from a value
+    integrity_t i0{internal_t{}};
 }
 //! \endcond
