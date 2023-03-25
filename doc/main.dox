@@ -11,7 +11,7 @@ according to their \e integrity, which comprises security-relevant
 properties of the entities. The integrity of an entity is not fixed. It
 changes dynamically, depending on interactions with other entities.
 
-\section SOFI_system SOFI system
+\section SOFI_system SOFI system and engine
 
 A <em>SOFI system</em> consists of the SOFI engine, entities, and the database
 containing integtities of all entities and rules needed for making security
@@ -53,6 +53,8 @@ information flow, an operation can be one of:
     sent from a client (the subject) to a server (the object). The request
     triggers some processing on the server and it also sends some data back to
     the client.
+    <li><em>No-flow operation</em> -- There is no information flow, neither
+    from the subject to the subject, nor in the opposite direction.
     </ul>
 </ul>
 

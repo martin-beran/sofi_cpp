@@ -30,7 +30,7 @@ namespace impl {
  * \tparam T a value from a lattice */
 template <class T> concept lattice =
     std::equality_comparable<T> && std::three_way_comparable<T> &&
-    requires (T v1, T v2) {
+    requires (const T v1, const T v2) {
         { v1 + v2 } -> std::same_as<T>; // operation join
         { v1 * v2 } -> std::same_as<T>; // operation meet
     };
@@ -49,9 +49,7 @@ template <class T> concept bounded_lattice =
 //! Requirements for a class representing an integrity value.
 /*! \tparam T an integrity class */
 template <class T> concept integrity =
-    impl::bounded_lattice<T> &&
-    std::default_initializable<T> && std::destructible<T> &&
-    std::copy_constructible<T> && std::assignable_from<T&, T> &&
+    impl::bounded_lattice<T> && std::regular<T> &&
     requires (const T i) {
         typename T::value_type;
         { i.value() } -> std::same_as<const typename T::value_type&>;
@@ -147,10 +145,7 @@ namespace impl {
 
 //! A type that may be used as the parameter of template integrity_linear
 /*! \tparam T an integral or enumeration type */
-template <class T> concept integrity_linear_value =
-    (std::is_integral_v<T> || std::is_enum_v<T>) &&
-    std::is_trivially_default_constructible_v<T> && std::is_trivially_destructible_v<T> &&
-    std::is_trivially_copy_constructible_v<T> && std::is_trivially_copyable_v<T>;
+template <class T> concept integrity_linear_value = std::is_integral_v<T> || std::is_enum_v<T>;
 
 } // namespace impl
 
@@ -340,10 +335,7 @@ namespace impl {
 
 //! A type that may be used as the parameter of template integrity_set
 /*! \tparam T a set element type */
-template <class T> concept integrity_set_value =
-    std::default_initializable<T> && std::destructible<T> &&
-    std::copy_constructible<T> && std::assignable_from<T&, T> &&
-    std::equality_comparable<T>;
+template <class T> concept integrity_set_value = std::regular<T>;
 
 } // namespace impl
 
