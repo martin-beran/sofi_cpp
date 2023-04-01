@@ -47,7 +47,8 @@ template <class T> concept bounded_lattice =
 } // namespace impl
 
 //! Requirements for a class representing an integrity value.
-/*! \tparam T an integrity class */
+/*! A default constructed integrity must have the minimum value.
+ * \tparam T an integrity class */
 template <class T> concept integrity =
     impl::bounded_lattice<T> && std::regular<T> &&
     requires (const T i) {

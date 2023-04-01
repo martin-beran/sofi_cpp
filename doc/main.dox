@@ -26,7 +26,7 @@ The main include file is soficpp.hpp.
 
 <ul>
 <li>\e Entity -- a part of a system that participates in an operation.
-It can be one of:
+According to its role in an operation, an entity can be one of:
     <ul>
     <li>\e Subject -- the active entity in an operation. It is the initiator of
     the operation, for example, a process in a operating system invoking
@@ -35,24 +35,31 @@ It can be one of:
     the operation, for example, a file being read or written by a process
     (which is the subject of the read/write operation).
     </ul>
+According to the information flow during an operation, an entity can be:
+    <ul>
+    <li>\e Writer, \e source -- if information flows from this entity during
+    the operation.
+    <li>\e Reader, \e destination -- if information flows to this entity during
+    the operation.
+    </ul>
 <li>\e Operation -- any access or action performed by a subject on an object.
 Rules of the SOFI model are evaluated before each operation and either permit,
 or deny execution of the operation. According to the direction of the
 information flow, an operation can be one of:
     <ul>
-    <li><em>Read operation</em> -- information flows from the object to the
-    subject, that is, the subject fetches information from the object. For
-    example, reading from a file.
-    <li><em>Write operation</em> -- information flows from the subject to the
-    object, that is, the subject changes the state of the object. For example,
-    writing to a file.
+    <li><em>Read operation</em> -- information flows from the object (source)
+    to the subject (destination), that is, the subject fetches information from
+    the object. For example, reading from a file.
+    <li><em>Write operation</em> -- information flows from the subject (source)
+    to the object (destination), that is, the subject changes the state of the
+    object. For example, writing to a file.
     <li><em>Read-write operation</em> -- a combination of read and write.
-    Information flows in both direction between the subject and the object. The
-    subject changes the state of the object, and retrieves some information
-    from it at the same time. For example, processing of a POST HTTP request
-    sent from a client (the subject) to a server (the object). The request
-    triggers some processing on the server and it also sends some data back to
-    the client.
+    Information flows in both direction between the subject and the object,
+    which are both sources and destinations. The subject changes the state of
+    the object, and retrieves some information from it at the same time. For
+    example, processing of a POST HTTP request sent from a client (the subject)
+    to a server (the object). The request triggers some processing on the
+    server and it also sends some data back to the client.
     <li><em>No-flow operation</em> -- There is no information flow, neither
     from the subject to the subject, nor in the opposite direction.
     </ul>
