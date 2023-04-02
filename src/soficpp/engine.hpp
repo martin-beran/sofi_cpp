@@ -97,7 +97,7 @@ public:
     {
         verdict_t verdict{};
         init_verdict(subj, obj, op, execute, verdict);
-        bool allow = access_test(obj.access_ctrl().test(subj, op, verdict));
+        bool allow = obj.access_ctrl().test(subj, op, verdict, controller_test::access);
         verdict.access_test(allow);
         after_test_access(subj, obj, op, execute, verdict, allow);
         return {verdict, allow};
@@ -142,10 +142,10 @@ public:
         bool allow_min_subj = true;
         bool allow_min_obj = true;
         if (i_obj()) {
-            allow_min_obj = *i_obj >= obj.min_integrity();
+            allow_min_obj = obj.min_integrity().test(*i_obj, op, v, controller_test::min_obj);
         }
         if (i_subj()) {
-            allow_min_subj = *i_subj >= subj.min_integrity();
+            allow_min_subj = subj.min_integrity().test(*i_subj, op, v, controller_test::min_subj);
         }
         v.min_test(allow_min_subj && allow_min_obj);
         after_test_min(subj, obj, op, execute, v, i_subj, allow_min_subj, i_obj, allow_min_obj);

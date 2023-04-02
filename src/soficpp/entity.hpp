@@ -157,13 +157,21 @@ private:
 
 static_assert(verdict<simple_verdict>);
 
+//! Kinds of tests performed by access_controller
+enum class controller_test {
+    access, //!< Testing if an operation is allowed by object access controller
+    min_subj, //!< Testing if an operation is allowed by subject minimum identity
+    min_obj, //!< Testing if an operation is allowed by object minimum identity
+};
+
 //! Requirements for a SOFI access access controller
 /*! Member function \c test() of the object's access controller is evaluated
  * with the subject integrity in order to decide if an operation is allowed.
- * The function gets a verdict object in order to read or store some additional
- * information if needed, but it is not required to indicate the result by
- * calling <tt>v.access_test()</tt>. Instead, the result is indicated solely by
- * the return value of \c test().
+ * When used to check the minimum integrity, it gets the intended new integrity
+ * of a reader in an operation. The function also gets a verdict object in
+ * order to read or store some additional information if needed, but it is not
+ * required to indicate the result by calling <tt>v.access_test()</tt>.
+ * Instead, the result is indicated solely by the return value of \c test().
  *
  * In addition, an access controller type must provide type aliases \c
  * integrity_t, \c operation_t, \c verdict_t.
@@ -172,9 +180,46 @@ template <class T> concept access_controller =
     integrity<typename T::integrity_t> &&
     operation<typename T::operation_t> &&
     verdict<typename T::verdict_t> &&
-    requires (T ctrl, const typename T::integrity_t subj, const typename T::operation_t op, typename T::verdict_t v) {
-        { ctrl.test(subj, op, v) } -> std::same_as<bool>;
+    requires (T ctrl, const typename T::integrity_t subj, const typename T::operation_t op, typename T::verdict_t v,
+              controller_test kind) {
+        { ctrl.test(subj, op, v, kind) } -> std::same_as<bool>;
     };
+
+//! A single-element access control list (ACL) that satisfies concept access_controller.
+/*! It is a single integrity. An operation is allowed by an ACL, iff the
+ * subject integrity is greater or equal to the integrity in the ACL.
+ * \tparam I an identity type
+ * \tparam O an operation type
+ * \tparam V a verdict type */
+template <class I, class O, class V> class acl_single {
+public:
+    //! The integrity type
+    using integrity_t = I;
+    //! The operation type
+    using operation_t = O;
+    //! The verdict type
+    using verdict_t = V;
+    //! The default constructor
+    acl_single() = default;
+    //! Stores an integrity value
+    /*! \param[in] integrity an integrity to be stored */
+    explicit acl_single(integrity_t integrity): integrity(std::move(integrity)) {}
+    //! The access test function for testing access during an operation.
+    /*! \param[in] subj the integrity of the subject
+     * \param[in] op the operation
+     * \param[in, out] v the verdict
+     * \param[in] kind the kind of test performed by the current call
+     * \return \c true if operation is allowed, \c false if denied */
+    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v, [[maybe_unused]] controller_test kind)
+    {
+        return subj >= integrity;
+    }
+    //! The integrity used by test()
+    integrity_t integrity{};
+};
+
+static_assert(access_controller<acl_single<integrity_single, operation_base<impl::operation_base_dummy_id>,
+              simple_verdict>>);
 
 //! Access control list (ACL) that satisfies concept access_controller, independent on operation.
 /*! It is a set of integrities. An operation is allowed by an ACL, iff the
@@ -200,8 +245,10 @@ public:
     /*! \param[in] subj the integrity of the subject
      * \param[in] op the operation
      * \param[in, out] v the verdict
+     * \param[in] kind the kind of test performed by the current call
      * \return \c true if operation is allowed, \c false if denied */
-    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v) {
+    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v, [[maybe_unused]] controller_test kind)
+    {
         for (auto&& i: *this)
             if (subj >= i)
                 return true;
@@ -243,8 +290,9 @@ public:
     /*! \param[in] subj the integrity of the subject
      * \param[in] op the operation
      * \param[in, out] v the verdict
+     * \param[in] kind the kind of test performed by the current call
      * \return \c true if operation is allowed, \c false if denied */
-    bool test(const I& subj, const O& op, V& v) {
+    bool test(const I& subj, const O& op, V& v, [[maybe_unused]] controller_test kind) {
         if (auto a = this->find(op.key()); a != this->end()) {
             if (a->second)
                 return a->second->test(subj, op, v);
@@ -494,7 +542,7 @@ static_assert(integrity_function<safe_integrity_fun<integrity_single, operation_
 
 //! Requirements for a class representing an entity
 /*! An entity type must provide:
- * \arg type aliases \c integrity_t, \c operation_t, \c verdict_t, \c
+ * \arg type aliases \c integrity_t, \c min_t, \c operation_t, \c verdict_t, \c
  * access_ctrl_t, \c integrity_fun_t
  * \arg function \c integrity() returning the current integrity
  * \arg function \c min_integrity() returning the current minimum integrity
@@ -507,33 +555,37 @@ static_assert(integrity_function<safe_integrity_fun<integrity_single, operation_
 template <class T> concept entity =
     std::is_object_v<T> &&
     integrity<typename T::integrity_t> &&
+    access_controller<typename T::min_t> &&
     operation<typename T::operation_t> &&
     verdict<typename T::verdict_t> &&
     access_controller<typename T::access_ctrl_t> &&
     integrity_function<typename T::integrity_fun_t> &&
-    requires (const T c_entity, T entity, typename T::integrity_t i) {
+    requires (const T c_entity, T entity, typename T::integrity_t i, typename T::min_t m) {
         { c_entity.integrity() } -> std::same_as<const typename T::integrity_t&>;
-        { c_entity.min_integrity() } -> std::same_as<const typename T::integrity_t&>;
+        { c_entity.min_integrity() } -> std::same_as<const typename T::min_t&>;
         { c_entity.access_ctrl() } -> std::same_as<const typename T::access_ctrl_t&>;
         { c_entity.test_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         { c_entity.prov_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         { c_entity.recv_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         entity.integrity(i);
-        entity.min_integrity(i);
+        entity.min_integrity(m);
     };
 
 //! A straightforward class template that satisfies concept entity.
 /*! \tparam I an integrity type
+ * \tparam M a minimum integrity type
  * \tparam O an operation type
  * \tparam V a verdict type
  * \tparam AC an access controller type
  * \tparam F an integrity modification function type */
-template <integrity I, operation O, verdict V, access_controller AC, integrity_function F>
+template <integrity I, access_controller M, operation O, verdict V, access_controller AC, integrity_function F>
 requires std::default_initializable<AC> && std::default_initializable<F>
 class basic_entity {
 public:
     //! The integrity type
     using integrity_t = I;
+    //! The minimum integrity type
+    using min_t = M;
     //! The operation type
     using operation_t = O;
     //! The verdict type
@@ -553,8 +605,13 @@ public:
         return _integrity;
     }
     //! Gets the minimum integrity.
-    /*! \return the integrity */
-    [[nodiscard]] const I& min_integrity() const noexcept {
+    /*! \return the minimum integrity */
+    [[nodiscard]] const M& min_integrity() const noexcept {
+        return _min_integrity;
+    }
+    //! Gets the minimum integrity.
+    /*! \return the minimum integrity */
+    [[nodiscard]] M& min_integrity() noexcept {
         return _min_integrity;
     }
     //! Gets the access controller.
@@ -604,7 +661,7 @@ public:
     }
     //! Sets the minimum integrity.
     /*! \param[in] val the new value */
-    void min_integrity(integrity_t val) {
+    void min_integrity(min_t val) {
         _min_integrity = std::move(val);
     }
     //! Sets the access controller.
@@ -631,7 +688,7 @@ private:
     //! The current integrity
     integrity_t _integrity = integrity_t::min();
     //! The minimum integrity
-    integrity_t _min_integrity = integrity_t::min();
+    min_t _min_integrity = integrity_t::min();
     //! The access controller
     access_ctrl_t _access_ctrl{};
     //! The testing function
@@ -641,5 +698,14 @@ private:
     //! The integrity receiving function
     integrity_fun_t _recv_fun = I::min();
 };
+
+static_assert(entity<basic_entity<
+    integrity_single,
+    acl_single<integrity_single, operation_base<impl::operation_base_dummy_id>, simple_verdict>,
+    operation_base<impl::operation_base_dummy_id>,
+    simple_verdict,
+    ops_acl<integrity_single, operation_base<impl::operation_base_dummy_id>, simple_verdict>,
+    integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>
+>>);
 
 } // namespace soficpp
