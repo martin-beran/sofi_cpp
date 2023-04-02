@@ -5,6 +5,7 @@
 #include <concepts>
 #include <functional>
 #include <type_traits>
+#include <vector>
 
 /*! \file
  * \brief Entities (subjects and objects)
@@ -13,13 +14,18 @@
 namespace soficpp {
 
 //! Requirements for a class representing a SOFI operation
-/*! An operation must provide member functions returning \c bool indicating
- * whether the operation is read, write, read-write, or no-flow.
+/*! An operation must provide member functions \c is_read() and \c is_write()
+ * returning \c bool indicating whether the operation is read, write,
+ * read-write, or no-flow. It must also provide a type alias \c key_t and a
+ * member function \c key() usable for storing an operation in an associative
+ * container, e.g., for selecting an element of ops_acl.
  * \tparam T an operation type */
 template <class T> concept operation =
     requires (const T op) {
+        typename T::key_t;
         { op.is_read() } -> std::same_as<bool>;
         { op.is_write() } -> std::same_as<bool>;
+        requires std::same_as<std::decay_t<decltype(op.key())>, typename T::key_t>;
     };
 
 //! A base polymorphic class for operations
@@ -29,6 +35,8 @@ template <class T> concept operation =
 template <class E> requires std::is_enum_v<E>
 class operation_base {
 public:
+    //! The key type for storing an operation in an associative container
+    using key_t = E;
     //! The type of operation identifiers
     using id_t = E;
     //! Default constructor
@@ -52,6 +60,11 @@ public:
     /*! \return \c false, that is, either read or no-flow operation */
     [[nodiscard]] virtual bool is_write() const {
         return false;
+    }
+    //! Gets the operation key for storing it in an associative container.
+    /*! \return the key, equal to the return value of id() */
+    [[nodiscard]] key_t key() const {
+        return id();
     }
     //! Gets the operation identifier.
     /*! \return the operation identifier; default-constructed enum value by
@@ -137,6 +150,11 @@ static_assert(verdict<simple_verdict>);
 //! Requirements for a SOFI access access controller
 /*! Member function \c test() of the object's access controller is evaluated
  * with the subject integrity in order to decide if an operation is allowed.
+ * The function gets a verdict object in order to read or store some additional
+ * information if needed, but it is not required to indicate the result by
+ * calling <tt>v.access_test()</tt>. Instead, the result is indicated solely by
+ * the return value of \c test().
+ *
  * In addition, an access controller type must provide type aliases \c
  * integrity_t, \c operation_t, \c verdict_t.
  * \tparam T an access controller type */
@@ -147,6 +165,94 @@ template <class T> concept access_controller =
     requires (T ctrl, const typename T::integrity_t subj, const typename T::operation_t op, typename T::verdict_t v) {
         { ctrl.test(subj, op, v) } -> std::same_as<bool>;
     };
+
+//! Access control list (ACL) that satisfies concept access_controller, independent on operation.
+/*! It is a set of integrities. An operation is allowed by an ACL, iff the
+ * subject identity is greater or equal to at least one element of the ACL.
+ * This ACL type does not take into account the operation. Use ops_acl instead
+ * for an ACL controlling access according to the operation.
+ * \tparam I an identity type
+ * \tparam O an operation type
+ * \tparam V a verdict type
+ * \tparam C a container of \a I */
+template <class I, class O, class V, template <class...> class C = std::vector>
+class acl: public C<I> {
+public:
+    //! The sequence container type
+    using container_t = C<I>;
+    //! The integrity type
+    using integrity_t = I;
+    //! The operation type
+    using operation_t = O;
+    //! The verdict type
+    using verdict_t = V;
+    //! The access test function for testing access during an operation.
+    /*! \param[in] subj the integrity of the subject
+     * \param[in] op the operation
+     * \param[in, out] v the verdict
+     * \return \c true if operation is allowed, \c false if denied */
+    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v) {
+        for (auto&& i: *this)
+            if (subj >= i)
+                return true;
+        return false;
+    }
+private:
+    using container_t::container_t;
+};
+
+static_assert(access_controller<acl<integrity_single, operation_base<impl::operation_base_dummy_id>, simple_verdict>>);
+
+//! Access control list (ACL) that satisfies concept access_controller, dependent on operation.
+/*! It is an associative container (a map, e.g., \c std::map or \c
+ * std::unordered_map) that holds share pointers to (inner) ACLs for individual
+ * operations. In addition, operations not found in the map are controlled by
+ * default_op. If a map element or default_op is \c nullptr, it works like an
+ * empty \ref acl, that is, it denies the operation.
+ * \tparam I an identity type
+ * \tparam O an operation type
+ * \tparam V a verdict type
+ * \tparam C a sequence container of \a I,
+ * \tparam A an inner ACL type
+ * \tparam M a mapping from <tt>I::key_t</tt> to shared pointers to  */
+template <class I, class O, class V, template <class...> class  C = std::vector,
+         class A = acl<I, O, V, C>, template <class...> class M = std::map>
+class ops_acl: public M<typename O::key_t, std::shared_ptr<A>> {
+public:
+    //! The map (associative container) type
+    using map_t = M<typename O::key_t, std::shared_ptr<A>>;
+    //! The integrity type
+    using integrity_t = I;
+    //! The operation type
+    using operation_t = O;
+    //! The verdict type
+    using verdict_t = V;
+    //! The ACL used for operations not found in the operation-specific ACLs
+    typename map_t::value_type default_op{};
+    //! The access test function for testing access during an operation.
+    /*! \param[in] subj the integrity of the subject
+     * \param[in] op the operation
+     * \param[in, out] v the verdict
+     * \return \c true if operation is allowed, \c false if denied */
+    bool test(const I& subj, const O& op, V& v) {
+        if (auto a = this->find(op.key()); a != this->end()) {
+            if (a->second)
+                return a->second->test(subj, op, v);
+            else
+                return false;
+        } else {
+            if (default_op)
+                return default_op->test(subj, op, v);
+            else
+                return false;
+        }
+    }
+private:
+    using map_t::map_t;
+};
+
+static_assert(access_controller<ops_acl<integrity_single, operation_base<impl::operation_base_dummy_id>,
+              simple_verdict>>);
 
 //! Requirements for an integrity modification function
 /*! An integrity modification function object. It is used to modify integrity

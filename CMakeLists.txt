@@ -137,6 +137,8 @@ if (MARKDOWN)
     function(add_markdown FILE)
         set(SRC "${CMAKE_CURRENT_SOURCE_DIR}/${FILE}.md")
         set(DST "${CMAKE_CURRENT_BINARY_DIR}/${FILE}.html")
+        cmake_path(GET DST PARENT_PATH DIR)
+        file(MAKE_DIRECTORY ${DIR})
         add_custom_command(
             OUTPUT ${DST}
             COMMAND
