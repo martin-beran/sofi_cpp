@@ -138,11 +138,21 @@ public:
     void min_test(bool val) noexcept {
         _min = val;
     }
+    //! Gets the result of access_controller evaluation.
+    /*! \return the stored result */
+    bool access_test() const noexcept {
+        return _access;
+    }
+    //! Gets the result of minimum integrity test.
+    /*! \return the stored result */
+    bool min_test() const noexcept {
+        return _min;
+    }
 private:
     //! The stored result of evaluation of an access_controller
-    bool _access = false;
+    bool _access: 1 = false;
     //! The stored result of evaluation of a minimum integrity test
-    bool _min = false;
+    bool _min: 1 = false;
 };
 
 static_assert(verdict<simple_verdict>);
@@ -504,7 +514,7 @@ template <class T> concept entity =
     requires (const T c_entity, T entity, typename T::integrity_t i) {
         { c_entity.integrity() } -> std::same_as<const typename T::integrity_t&>;
         { c_entity.min_integrity() } -> std::same_as<const typename T::integrity_t&>;
-        { c_entity.access_ctrl() } -> std::same_as<const typename T::access_ctrl_tC&>;
+        { c_entity.access_ctrl() } -> std::same_as<const typename T::access_ctrl_t&>;
         { c_entity.test_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         { c_entity.prov_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         { c_entity.recv_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
