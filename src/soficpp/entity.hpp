@@ -137,13 +137,14 @@ static_assert(verdict<simple_verdict>);
 //! Requirements for a SOFI access access controller
 /*! Member function \c test() of the object's access controller is evaluated
  * with the subject integrity in order to decide if an operation is allowed.
- * \tparam T an access controller type
- * \tparam I an integrity type
- * \tparam O an operation type
- * \tparam V a verdict type */
-template <class T, class I, class O, class V> concept access_controller =
-    integrity<I> && operation<O> && verdict<V> &&
-    requires (T ctrl, const I subj, const O op, V v) {
+ * In addition, an access controller type must provide type aliases \c
+ * integrity_t, \c operation_t, \c verdict_t.
+ * \tparam T an access controller type */
+template <class T> concept access_controller =
+    integrity<typename T::integrity_t> &&
+    operation<typename T::operation_t> &&
+    verdict<typename T::verdict_t> &&
+    requires (T ctrl, const typename T::integrity_t subj, const typename T::operation_t op, typename T::verdict_t v) {
         { ctrl.test(subj, op, v) } -> std::same_as<bool>;
     };
 
@@ -157,18 +158,21 @@ template <class T, class I, class O, class V> concept access_controller =
  * engine can trust the function to be \e safe, that is to alaways obey the \a
  * limit. Safety of the function is returned by its member function \c safe().
  *
- * In addition, the function object must have static member fuctions:
+ * In addition, the function object must declare type aliases \c integrity_t
+ * and \c operation_t, and static member fuctions:
  * \arg \c min() -- provides a function that always returns the minimum integrity value
  * \arg \c identity() -- provides a function that behaves as the identity
  * function limited by \a limit
  * \arg \c  max() -- provides a function that always returns \a limit
- * \tparam F a function type
- * \tparam I an integrity type
- * \tparam O a SOFI operation type */
-template <class F, class I, class O> concept integrity_function =
-    integrity<I> && operation<O> && std::movable<F> &&
-    requires (const F f, const I i, const I limit, const O o) {
-        { f(i, limit, o) } -> std::same_as<I>;
+ * \tparam F a function type */
+template <class F> concept integrity_function =
+    std::movable<F> &&
+    integrity<typename F::integrity_t> &&
+    operation<typename F::operation_t> &&
+    requires (const F f, const typename F::integrity_t i,
+              const typename F::integrity_t limit, const typename F::operation_t o)
+    {
+        { f(i, limit, o) } -> std::same_as<typename F::integrity_t>;
         { f.safe() } -> std::same_as<bool>;
         { F::min() } -> std::same_as<F>;
         { F::identity() } -> std::same_as<F>;
@@ -189,6 +193,10 @@ class dyn_integrity_fun: std::function<I(const I&, const I&, const O&)> {
     using base_t = std::function<I(const I&, const I&, const O&)>;
     using base_t::base_t;
 public:
+    //! The integrity type
+    using integrity_t = I;
+    //! The operation type
+    using operation_t = O;
     //! Calls the stored target function
     /*! \param[in] i an itegrity value to be modified while passed from a
      * source to a destination object
@@ -242,8 +250,7 @@ private:
     bool _safe = false;
 };
 
-static_assert(integrity_function<dyn_integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>,
-              integrity_single, operation_base<impl::operation_base_dummy_id>>);
+static_assert(integrity_function<dyn_integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>>);
 
 //! A polymorphic function wrapper that satisfies concept integrity_function
 /*! It differs from its base class std::function in that if it
@@ -260,6 +267,10 @@ class integrity_fun: std::function<I(const I&, const I&, const O&)> {
     using base_t = std::function<I(const I&, const I&, const O&)>;
     using base_t::base_t;
 public:
+    //! The integrity type
+    using integrity_t = I;
+    //! The operation type
+    using operation_t = O;
     //! Calls the stored target function
     /*! \param[in] i an itegrity value to be modified while passed from a
      * source to a destination object
@@ -301,12 +312,10 @@ public:
     }
 };
 
-static_assert(integrity_function<integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>,
-              integrity_single, operation_base<impl::operation_base_dummy_id>>);
-static_assert(integrity_function<integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>, false>,
-              integrity_single, operation_base<impl::operation_base_dummy_id>>);
-static_assert(integrity_function<integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>, true>,
-              integrity_single, operation_base<impl::operation_base_dummy_id>>);
+static_assert(integrity_function<integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>>);
+static_assert(integrity_function<integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>,
+              false>>);
+static_assert(integrity_function<integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>, true>>);
 
 //! A polymorphic function wrapper that satisfies concept integrity_function
 /*! It differs from its base class std::function in that if it
@@ -321,6 +330,10 @@ class safe_integrity_fun: std::function<I(const I&, const I&, const O&)> {
     using base_t = std::function<I(const I&, const I&, const O&)>;
     using base_t::base_t;
 public:
+    //! The integrity type
+    using integrity_t = I;
+    //! The operation type
+    using operation_t = O;
     //! Calls the stored target function
     /*! \param[in] i an itegrity value to be modified while passed from a
      * source to a destination object
@@ -361,8 +374,7 @@ public:
     }
 };
 
-static_assert(integrity_function<safe_integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>,
-              integrity_single, operation_base<impl::operation_base_dummy_id>>);
+static_assert(integrity_function<safe_integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>>);
 
 //! Requirements for a class representing an entity
 /*! An entity type must provide:
@@ -375,27 +387,21 @@ static_assert(integrity_function<safe_integrity_fun<integrity_single, operation_
  * integrity testing, providing, and receiving functions
  * \arg function \c integrity() that sets the integrity of the entity
  * \arg function \c min_integrity() that sets the minimum integrity of the entity
- * \tparam T an entity type
- * \tparam I an integrity type
- * \tparam O an operation type
- * \tparam V a verdict type
- * \tparam AC an access controller type
- * \tparam F an integrity modification function type */
-template <class T, class I, class O, class V, class AC, class F> concept entity =
-    std::is_object_v<T> && integrity<I> && operation<O> && verdict<V> &&
-    access_controller<AC, I, O, V> && integrity_function<F, I, O> &&
-    std::same_as<typename T::integrity_t, I> &&
-    std::same_as<typename T::operation_t, O> &&
-    std::same_as<typename T::verdict_t, V> &&
-    std::same_as<typename T::access_ctrl_t, AC> &&
-    std::same_as<typename T::integrity_fun_t, F> &&
-    requires (const T c_entity, T entity, I i) {
-        { c_entity.integrity() } -> std::same_as<const I&>;
-        { c_entity.min_integrity() } -> std::same_as<const I&>;
-        { c_entity.access_ctrl() } -> std::same_as<const AC&>;
-        { c_entity.test_fun() } -> std::same_as<const F&>;
-        { c_entity.prov_fun() } -> std::same_as<const F&>;
-        { c_entity.recv_fun() } -> std::same_as<const F&>;
+ * \tparam T an entity type */
+template <class T> concept entity =
+    std::is_object_v<T> &&
+    integrity<typename T::integrity_t> &&
+    operation<typename T::operation_t> &&
+    verdict<typename T::verdict_t> &&
+    access_controller<typename T::access_ctrl_t> &&
+    integrity_function<typename T::integrity_fun_t> &&
+    requires (const T c_entity, T entity, typename T::integrity_t i) {
+        { c_entity.integrity() } -> std::same_as<const typename T::integrity_t&>;
+        { c_entity.min_integrity() } -> std::same_as<const typename T::integrity_t&>;
+        { c_entity.access_ctrl() } -> std::same_as<const typename T::access_ctrl_tC&>;
+        { c_entity.test_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
+        { c_entity.prov_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
+        { c_entity.recv_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         entity.integrity(i);
         entity.min_integrity(i);
     };
@@ -406,7 +412,7 @@ template <class T, class I, class O, class V, class AC, class F> concept entity 
  * \tparam V a verdict type
  * \tparam AC an access controller type
  * \tparam F an integrity modification function type */
-template <integrity I, operation O, verdict V, access_controller<I, O, V> AC, integrity_function<I, O> F>
+template <integrity I, operation O, verdict V, access_controller AC, integrity_function F>
 requires std::default_initializable<AC> && std::default_initializable<F>
 class basic_entity {
 public:
