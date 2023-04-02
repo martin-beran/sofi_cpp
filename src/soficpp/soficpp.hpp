@@ -7,6 +7,7 @@
  */
 
 #include "soficpp/enum_str.hpp"
+#include "soficpp/engine.hpp"
 #include "soficpp/entity.hpp"
 #include "soficpp/integrity.hpp"
 

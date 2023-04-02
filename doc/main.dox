@@ -14,13 +14,14 @@ changes dynamically, depending on interactions with other entities.
 \section SOFI_system SOFI system and engine
 
 A <em>SOFI system</em> consists of the SOFI engine, entities, and the database
-containing integtities of all entities and rules needed for making security
+containing integrities of all entities and rules needed for making security
 decisions, for example, ACLs (Access Control Lists). The <em>SOFI engine</em>
 controls all operations performed by entities of the SOFI system and enforces
 its rules. The engine has full rights and is not restricted by the SOFI rules.
 
 The complete SOFI system implementation is contained in namespace \ref soficpp.
-The main include file is soficpp.hpp.
+The main include file is soficpp.hpp. Declarations related to the engine are in
+file engine.hpp.
 
 \section SOFI_entities_ops Entities and operations
 
@@ -65,8 +66,7 @@ information flow, an operation can be one of:
     </ul>
 </ul>
 
-File entity.hpp contains declarations related to entities. File operation.hpp
-contains declarations related to operations.
+File entity.hpp contains declarations related to entities.
 
 \section SOFI_integrity Integrity
 
@@ -110,7 +110,7 @@ updating integrity values.
 ACL, minimum integrity, functions for testing, providing, and accepting
 integrity
 
-File operation.hpp contains declarations related to evaluating SOFI rules and
+File engine.hpp contains declarations related to evaluating SOFI rules and
 executing operations.
 
 \section SOFI_confidentiality Confidentiality
