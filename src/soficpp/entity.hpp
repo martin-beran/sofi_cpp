@@ -285,7 +285,7 @@ public:
     //! The verdict type
     using verdict_t = V;
     //! The ACL used for operations not found in the operation-specific ACLs
-    typename map_t::value_type default_op{};
+    typename map_t::mapped_type default_op{};
     //! The access test function for testing access during an operation.
     /*! \param[in] subj the integrity of the subject
      * \param[in] op the operation

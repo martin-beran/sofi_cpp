@@ -20,8 +20,8 @@ controls all operations performed by entities of the SOFI system and enforces
 its rules. The engine has full rights and is not restricted by the SOFI rules.
 
 The complete SOFI system implementation is contained in namespace \ref soficpp.
-The main include file is soficpp.hpp. Declarations related to the engine are in
-file engine.hpp.
+The main include file is soficpp.hpp. File engine.hpp contains declarations
+related to the engine.
 
 \section SOFI_entities_ops Entities and operations
 
@@ -118,6 +118,8 @@ executing operations.
 \section SOFI_distributed DiSOFI (Distributed SOFI)
 
 Agent, message, export, import
+
+File agent.hpp contains declarations related to the distributed SOFI model.
 
 \section Thread_safety Implementation thread safety
 
