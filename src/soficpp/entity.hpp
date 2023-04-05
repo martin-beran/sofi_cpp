@@ -29,7 +29,8 @@ template <class T> concept operation =
     };
 
 //! A base polymorphic class for operations
-/*! It is a no-flow operation, identified by an enumeration and by a string
+/*! It satisfies concept soficpp::operation.
+ * It is a no-flow operation, identified by an enumeration and by a string
  * name.
  * \tparam E an enumeration of operation identifiers */
 template <class E> requires std::is_enum_v<E>
@@ -114,6 +115,7 @@ template <class T> concept verdict =
     };
 
 //! A simple verdict class that stores only the arguments of access_check() and min_check().
+/*! It satisfies concept soficpp::verdict. */
 class simple_verdict {
 public:
     //! Default constructor, initializes the verdict to denied.
@@ -165,13 +167,18 @@ enum class controller_test {
 };
 
 //! Requirements for a SOFI access access controller
-/*! Member function \c test() of the object's access controller is evaluated
- * with the subject integrity in order to decide if an operation is allowed.
- * When used to check the minimum integrity, it gets the intended new integrity
- * of a reader in an operation. The function also gets a verdict object in
- * order to read or store some additional information if needed, but it is not
- * required to indicate the result by calling <tt>v.access_test()</tt>.
- * Instead, the result is indicated solely by the return value of \c test().
+/*! Boolean member function \c test() of the object's access controller is
+ * evaluated with the subject integrity in order to decide if an operation is
+ * allowed. When used to check the minimum integrity, it gets the intended new
+ * integrity of a reader in an operation. The function also gets a verdict
+ * object in order to read or store some additional information if needed, but
+ * it is not required to indicate the result by calling
+ * <tt>v.access_test()</tt>. Instead, the result is indicated solely by the
+ * return value of \c test().
+ *
+ * The test function should be \e monotonic, that is, if it returns \c true for
+ * some integrity, it should return \c true also for all greater integrity
+ * values.
  *
  * In addition, an access controller type must provide type aliases \c
  * integrity_t, \c operation_t, \c verdict_t.
@@ -185,7 +192,7 @@ template <class T> concept access_controller =
         { ctrl.test(subj, op, v, kind) } -> std::same_as<bool>;
     };
 
-//! A single-element access control list (ACL) that satisfies concept access_controller.
+//! A single-element access control list (ACL) that satisfies concept soficpp::access_controller.
 /*! It is a single integrity. An operation is allowed by an ACL, iff the
  * subject integrity is greater or equal to the integrity in the ACL.
  * \tparam I an identity type
@@ -221,7 +228,7 @@ public:
 static_assert(access_controller<acl_single<integrity_single, operation_base<impl::operation_base_dummy_id>,
               simple_verdict>>);
 
-//! Access control list (ACL) that satisfies concept access_controller, independent on operation.
+//! Access control list (ACL) that satisfies concept soficpp::access_controller, independent on operation.
 /*! It is a set of integrities. An operation is allowed by an ACL, iff the
  * subject identity is greater or equal to at least one element of the ACL.
  * This ACL type does not take into account the operation. Use ops_acl instead
@@ -260,7 +267,7 @@ private:
 
 static_assert(access_controller<acl<integrity_single, operation_base<impl::operation_base_dummy_id>, simple_verdict>>);
 
-//! Access control list (ACL) that satisfies concept access_controller, dependent on operation.
+//! Access control list (ACL) that satisfies concept soficpp::access_controller, dependent on operation.
 /*! It is an associative container (a map, e.g., \c std::map or \c
  * std::unordered_map) that holds share pointers to (inner) ACLs for individual
  * operations. In addition, operations not found in the map are controlled by
@@ -343,7 +350,7 @@ template <class F> concept integrity_function =
         { F::max() } -> std::same_as<F>;
     };
 
-//! A polymorphic function wrapper that satisfies concept integrity_function
+//! A polymorphic function wrapper that satisfies concept soficpp::integrity_function
 /*! It differs from its base class std::function in that if it
  * contains no target, the call operator works as the identity function
  * (returns the input integrity) instead of throwing \c std::bad_function_call.
@@ -416,7 +423,7 @@ private:
 
 static_assert(integrity_function<dyn_integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>>>);
 
-//! A polymorphic function wrapper that satisfies concept integrity_function
+//! A polymorphic function wrapper that satisfies concept soficpp::integrity_function
 /*! It differs from its base class std::function in that if it
  * contains no target, the call operator works as the identity function
  * (returns the input integrity) instead of throwing \c std::bad_function_call.
@@ -481,7 +488,7 @@ static_assert(integrity_function<integrity_fun<integrity_single, operation_base<
               false>>);
 static_assert(integrity_function<integrity_fun<integrity_single, operation_base<impl::operation_base_dummy_id>, true>>);
 
-//! A polymorphic function wrapper that satisfies concept integrity_function
+//! A polymorphic function wrapper that satisfies concept soficpp::integrity_function
 /*! It differs from its base class std::function in that if it
  * contains no target, the call operator works as the identity function
  * (returns the input integrity) instead of throwing \c std::bad_function_call.
@@ -571,7 +578,7 @@ template <class T> concept entity =
         entity.min_integrity(m);
     };
 
-//! A straightforward class template that satisfies concept entity.
+//! A straightforward class template that satisfies concept soficpp::entity.
 /*! \tparam I an integrity type
  * \tparam M a minimum integrity type
  * \tparam O an operation type

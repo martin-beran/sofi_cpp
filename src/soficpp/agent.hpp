@@ -28,7 +28,7 @@ struct agent_result {
         untrusted,
     };
     //! Stores a result code.
-    /*! \param[in] c the result code */
+    /*! \param[in] code the result code */
     explicit constexpr agent_result(result code = success) noexcept: code(code) {}
     //! Checks if the result represents success.
     /*! \return \c true if \ref code is \ref agent_result::success, \c false
@@ -65,7 +65,8 @@ template <class T> concept agent =
     };
 
 //! A simple agent that exports and imports by copy between an entity and a message
-/*! The entity and the message are of the same type and a it must be copy
+/*! It satisfies concept soficpp::copy_agent.
+ * The entity and the message are of the same type and a it must be copy
  * assignable. The result of an export or import can be controlled by setting
  * the appropriate member of type agent_result prior to the operation.
  * \tparam T a type of both entity and message */

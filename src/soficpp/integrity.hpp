@@ -57,7 +57,8 @@ template <class T> concept integrity =
     };
 
 //! The simplest integrity type containing just a single integrity value
-/*! \test in file test_integrity.cpp */
+/*! It satisfies concept soficpp::integrity.
+ * \test in file test_integrity.cpp */
 class integrity_single {
 public:
     //! There is no internal value
@@ -151,7 +152,8 @@ template <class T> concept integrity_linear_value = std::is_integral_v<T> || std
 } // namespace impl
 
 //! An integrity type with linearly ordered integrity values
-/*! \tparam T the underlying type of integrity values
+/*! It satisfies concept soficpp::integrity.
+ * \tparam T the underlying type of integrity values
  * \tparam Min the minimum integrity
  * \tparam Max the maximum integrity
  * \test in file test_integrity.cpp */
@@ -237,7 +239,8 @@ static_assert(std::is_same_v<
     std::strong_ordering>);
 
 //! An integrity type that uses a set of bits as an integrity value
-/*! The values are partially ordered using the subset relation. The lattice
+/*! It satisfies concept soficpp::integrity.
+ * The values are partially ordered using the subset relation. The lattice
  * operation join and meet are set union and intersection, respectively. The
  * least element is the empty set. the greatest element is the set containing
  * all \a N bits.
@@ -341,7 +344,8 @@ template <class T> concept integrity_set_value = std::regular<T>;
 } // namespace impl
 
 //! An integrity type that uses a set of values as an integrity value
-/*! The values are partially ordered using the subset relation. The lattice
+/*! It satisfies concept soficpp::integrity.
+ * The values are partially ordered using the subset relation. The lattice
  * operation join and meet are set union and intersection, respectively. The
  * least element is the empty set. the greatest element is the special value
  * \ref universe, representing a set containing all possible values.
@@ -529,7 +533,8 @@ private:
 static_assert(integrity<integrity_set<std::string>>);
 
 //! An integrity type that holds another integrity type and shares it when copied
-/*! It holds a shared pointer to an integrity object of type \a T internally.
+/*! It satisfies concept soficpp::integrity.
+ * It holds a shared pointer to an integrity object of type \a T internally.
  * Copying an integrity_cow object copies only the pointer, not the target
  * object. Moving from an integrity_cow object sets the internal object to \c
  * nullptr, therefore after a move, it is not safe to access any member of the

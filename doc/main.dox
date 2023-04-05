@@ -21,7 +21,7 @@ its rules. The engine has full rights and is not restricted by the SOFI rules.
 
 The complete SOFI system implementation is contained in namespace \ref soficpp.
 The main include file is soficpp.hpp. File engine.hpp contains declarations
-related to the engine.
+related to the engine, especially class soficpp::engine.
 
 \section SOFI_entities_ops Entities and operations
 
@@ -48,12 +48,12 @@ Rules of the SOFI model are evaluated before each operation and either permit,
 or deny execution of the operation. According to the direction of the
 information flow, an operation can be one of:
     <ul>
-    <li><em>Read operation</em> -- information flows from the object (source)
-    to the subject (destination), that is, the subject fetches information from
-    the object. For example, reading from a file.
-    <li><em>Write operation</em> -- information flows from the subject (source)
-    to the object (destination), that is, the subject changes the state of the
-    object. For example, writing to a file.
+    <li><em>Read operation</em> -- information flows from the object (writer,
+    source) to the subject (reader, destination), that is, the subject fetches
+    information from the object. For example, reading from a file.
+    <li><em>Write operation</em> -- information flows from the subject (writer,
+    source) to the object (source, destination), that is, the subject changes
+    the state of the object. For example, writing to a file.
     <li><em>Read-write operation</em> -- a combination of read and write.
     Information flows in both direction between the subject and the object,
     which are both sources and destinations. The subject changes the state of
@@ -66,7 +66,9 @@ information flow, an operation can be one of:
     </ul>
 </ul>
 
-File entity.hpp contains declarations related to entities.
+File entity.hpp contains declarations related to entities. The main concepts
+are soficpp::entity and soficpp::operation, implemented by classes
+soficpp::basic_entity and soficpp::operation_base.
 
 \section SOFI_integrity Integrity
 
@@ -102,24 +104,142 @@ set (the set of all subsets) of the set of integrity attributes. The operations
 join and meet and the order relation are implemented by set union and
 itersection, and by the subset relation, respectivelly.
 
-File integrity.hpp contains declarations related to storage, testing, and
-updating integrity values.
+File integrity.hpp contains declarations related to integrity values. There are
+several classes implementing concept soficpp::integrity:
+soficpp::integrity_single, soficpp::integrity_linear,
+soficpp::integrity_bitset, soficpp::integrity_set, soficpp::integrity_shared.
 
 \section SOFI_rules Rules for permitting operations
 
-ACL, minimum integrity, functions for testing, providing, and accepting
-integrity
+SOFI deals with allowing or denying and operations only. Actions done by an
+operation, for example, reading or writing data, are executed only if the
+operation is allowed by the SOFI engine, but the execution itself is out of
+scope of SOFI.
+
+SOFI rules check that a subject has enough rights, represented by its
+integrity, to execute an operation on an object. If the operation is comprised
+of passing some data from one (writer) entity to the other (reader), these data
+can change the internal state of the reader. It can potentially influence the
+trustworthiness, represented by the integrity, of the reader. The influence can
+be both negative, e.g., damaging the state of the reader by incorrect or
+malicious data, and positive, e.g., when granting additional privileges by the
+writer to the reader. SOFI models the effects of a data flow by adjusting the
+integrity of the reader according to its previous integrity and the writer
+integrity.
+
+Each entity holds several attributes needed to evaluate SOFI operations:
+\arg <em>Current integrity</em> -- represents the current state of the entity
+and controls its access rights when acting as a subject.
+\arg <em>Minimum integrity</em> -- protects the entity from operations that
+would reduce its integrity below a threshold. It may be either a threshold
+integrity value, or a predicate acting on integrity values and deciding if an
+integrity is sufficiently high.
+\arg <em>Access controller</em> -- is used to test subject integrity when the
+entity acts as the object of an operation. In general, it is a function that
+gets the subject integrity and parameters of the operation and decides if the
+operation is allowed. Although not strictly required, the access controller
+should be monotonic, so that if it allows the operation for an integrity, it
+should also allow it for all greater integrities (in the lattice ordering).
+\arg <em>Integrity testing function</em> -- is used to adjust the integrity of
+the entity acting as the reader in an operation. To preserve security
+guarantees of the SOFI model, the result of the function must be less or equal
+to the old integrity of the reader entity.
+\arg <em>Integrity providing function</em> -- is used to grant an integrity
+to the reader if the entity acts as the writer in an operation. To preserve
+security guarantees of the SOFI model, the result of the function must be less
+or equal to the integrity of the writer.
+\arg <em>Integrity receiving function</em> -- is used to accept an integrity
+granted by the writer when the entity acts as the reader in an operation. To
+preserve security guarantees of the SOFI model, the result of the function must
+be less or equal to its argument.
+
+A simple example of an access controller is an <em>access control list
+(ACL)</em>, implemented by classes soficpp::acl_single, soficpp::acl,
+soficpp::ops_acl. It is a set of integrities. A tested integrity is allowed by
+the ACL iff the ACL contains at least one element less or equal to the tested
+integrity.
+
+File entity.hpp contains declarations related to entity attributes: concepts
+soficpp::access_controller and soficpp::integrity_function, implemented by
+classes, e.g., soficpp::ops_acl, soficpp::dyn_integrity_fun,
+soficpp::integrity_fun, soficpp::safe_integrity_fun.
+
+The algorithms performed by the SOFI engine when an operation is to be
+executed:
+<ol>
+<li>The access controller of the object is evaluated for the integrity of the
+subject. If the access is denied, the operation terminates immediately.
+<li>If the operation is read or write, the new integrity of the reader is
+computed, but not yet assigned to the reader. For a read-write operation, the
+computation of new integrities is done in both directions independently. The
+new integrity of a reader is computed in several steps:
+    <ol>
+    <li>The new integrity is initialized to the lattice meet of the old reader
+    integrity and the result of the reader integrity testing function applied
+    to the writer integrity.
+    <li>The writer integrity providing function is applied to the writer
+    integrity.
+    <li>The reader integrity receiving function is applied to the result of the
+    previous step.
+    <li>The lattice join is applied to the new integrity and the result of the
+    previous step.
+    </ol>
+<li>The new integrity computed in the previous step is tested against the
+minimum integrity of the reader, or independently for both readers during
+a read-write operation. If at least one new integrity does not pass the test,
+the operation terminates immediately.
+<li>The new integrity becomes the current integrity of the reader (or both
+readers in a read-write operation).
+<li>The operation is executed.
+</ol>
+
+It is also possible to evaluate SOFI rules, returning whether the operation
+would be allowed or denied, without actually executing the operation. The
+algorithm of such test is the same, but the last two steps (setting new
+integrities and executing the operation) are omitted.
 
 File engine.hpp contains declarations related to evaluating SOFI rules and
-executing operations.
+executing operations. The main function that implents the SOFI operation
+algorithm is soficpp::engine::operation().
 
 \section SOFI_confidentiality Confidentiality
 
+The SOFI model can be used also to maintain confidentiality of information, by
+forbidding passing confidential information to readers without sufficient
+clearance. The level of confidentiality is represented by integrity of the
+writer, with greater integrity representing less confidential information. The
+level of security clearance is represented by the minimum integrity of the
+reader, with greater minimum integrity representing less clearance.
+
+Passing highly confidential (less integrity) information to an entity with low
+clearance (high minimum integrity) is blocked by the SOFI algorithm in the step
+comparing the new reader integrity with the minimum integrity.
+
 \section SOFI_distributed DiSOFI (Distributed SOFI)
 
-Agent, message, export, import
+It is possible to extend the SOFI model from a single SOFI system controlled by
+a single SOFI engine to a communicating distributed set of SOFI systems and
+engines. Each SOFI engine in such <em>distributed SOFI (DiSOFI)</em>
+environment uses several objects and functions for communicating with all other
+remote SOFI engines:
+
+\arg \e Agent -- represents a remote SOFI engine and provides methods for
+exporting local entities to the remote SOFI system and for importing remote
+entities to the local SOFI system.
+\arg \e Message -- is an external representation of an entity. It can be passed
+to a remote SOFI system. The message contains the SOFI attributes of the
+entity, any additional data of the entity (which represent the state of the
+entity and are used by operations), and authentication data (for
+example, a cryptographic signature) usable to verify that the content of the
+message is authentic and unchanged since produced by the local SOFI engine.
+\arg \e Export -- a method of an agent that converts a local entity to
+a message that can be sent to the remote SOFI system represented by the agent.
+\arg \e Import -- a method of an agent that converts a message received from
+the remote SOFI system represented by the agent to a local entity.
 
 File agent.hpp contains declarations related to the distributed SOFI model.
+There are concepts soficpp::message, soficpp::agent. An example of a trivial
+agent implementation is class soficpp::copy_agent.
 
 \section Thread_safety Implementation thread safety
 
