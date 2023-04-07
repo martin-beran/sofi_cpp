@@ -9,6 +9,8 @@
 
 /*! \file
  * \brief Entities (subjects and objects)
+ *
+ * \test in file test_entity.cpp
  */
 
 namespace soficpp {
@@ -32,7 +34,8 @@ template <class T> concept operation =
 /*! It satisfies concept soficpp::operation.
  * It is a no-flow operation, identified by an enumeration and by a string
  * name.
- * \tparam E an enumeration of operation identifiers */
+ * \tparam E an enumeration of operation identifiers
+ * \test in file test_entity.cpp */
 template <class E> requires std::is_enum_v<E>
 class operation_base {
 public:
@@ -115,7 +118,8 @@ template <class T> concept verdict =
     };
 
 //! A simple verdict class that stores only the arguments of access_check() and min_check().
-/*! It satisfies concept soficpp::verdict. */
+/*! It satisfies concept soficpp::verdict.
+ * \test in file test_entity.cpp */
 class simple_verdict {
 public:
     //! Default constructor, initializes the verdict to denied.
@@ -173,8 +177,10 @@ enum class controller_test {
  * integrity of a reader in an operation. The function also gets a verdict
  * object in order to read or store some additional information if needed, but
  * it is not required to indicate the result by calling
- * <tt>v.access_test()</tt>. Instead, the result is indicated solely by the
- * return value of \c test().
+ * <tt>v.access_test()</tt> for <tt>kind=controller_test::access</tt>, or
+ * <tt>v.min_test()</tt> for <tt>kind=controller_test::min_subj</tt> or
+ * <tt>kind=controller_test::min_obj</tt>. Instead, the result is indicated
+ * solely by the return value of \c test().
  *
  * The test function should be \e monotonic, that is, if it returns \c true for
  * some integrity, it should return \c true also for all greater integrity
@@ -197,7 +203,8 @@ template <class T> concept access_controller =
  * subject integrity is greater or equal to the integrity in the ACL.
  * \tparam I an identity type
  * \tparam O an operation type
- * \tparam V a verdict type */
+ * \tparam V a verdict type
+ * \test in file test_entity.cpp */
 template <class I, class O, class V> class acl_single {
 public:
     //! The integrity type
@@ -236,7 +243,8 @@ static_assert(access_controller<acl_single<integrity_single, operation_base<impl
  * \tparam I an identity type
  * \tparam O an operation type
  * \tparam V a verdict type
- * \tparam C a container of \a I */
+ * \tparam C a container of \a I
+ * \test in file test_entity.cpp */
 template <class I, class O, class V, template <class...> class C = std::vector>
 class acl: public C<I> {
 public:
@@ -248,6 +256,12 @@ public:
     using operation_t = O;
     //! The verdict type
     using verdict_t = V;
+    //! Copy-like construction from an object of the base class
+    /*! \param[in] c a container of identity values */
+    acl(const container_t& c): container_t(c) {}
+    //! Move-like construction from an object of the base class
+    /*! \param[in] c a container of identity values */
+    acl(container_t&& c): container_t(std::move(c)) {}
     //! The access test function for testing access during an operation.
     /*! \param[in] subj the integrity of the subject
      * \param[in] op the operation
@@ -278,7 +292,8 @@ static_assert(access_controller<acl<integrity_single, operation_base<impl::opera
  * \tparam V a verdict type
  * \tparam C a sequence container of \a I,
  * \tparam A an inner ACL type
- * \tparam M a mapping from <tt>I::key_t</tt> to shared pointers to  */
+ * \tparam M a mapping from <tt>I::key_t</tt> to shared pointers to \a A
+ * \test in file test_entity.cpp */
 template <class I, class O, class V, template <class...> class  C = std::vector,
          class A = acl<I, O, V, C>, template <class...> class M = std::map>
 class ops_acl: public M<typename O::key_t, std::shared_ptr<A>> {
@@ -357,7 +372,8 @@ template <class F> concept integrity_function =
  * Its safety status is dynamically changeable, always created as unsafe. If
  * changed to safe, the caller must ensure that the target function is safe.
  * \tparam I an integrity type
- * \tparam O a SOFI operation type */
+ * \tparam O a SOFI operation type
+ * \test in file test_entity.cpp */
 template <integrity I, operation O>
 class dyn_integrity_fun: std::function<I(const I&, const I&, const O&)> {
     //! The alias for the base class
@@ -431,7 +447,8 @@ static_assert(integrity_function<dyn_integrity_fun<integrity_single, operation_b
  * origin of its target function must ensure that the target function is safe.
  * \tparam I an integrity type
  * \tparam O a SOFI operation type
- * \tparam Safe safety of this object */
+ * \tparam Safe safety of this object
+ * \test in file test_entity.cpp */
 template <integrity I, operation O, bool Safe = false>
 class integrity_fun: std::function<I(const I&, const I&, const O&)> {
     //! The alias for the base class
@@ -494,7 +511,8 @@ static_assert(integrity_function<integrity_fun<integrity_single, operation_base<
  * (returns the input integrity) instead of throwing \c std::bad_function_call.
  * It is always safe, regardless of safety of the target function.
  * \tparam I an integrity type
- * \tparam O a SOFI operation type */
+ * \tparam O a SOFI operation type
+ * \test in file test_entity.cpp */
 template <integrity I, operation O>
 class safe_integrity_fun: std::function<I(const I&, const I&, const O&)> {
     //! The alias for the base class
@@ -584,7 +602,8 @@ template <class T> concept entity =
  * \tparam O an operation type
  * \tparam V a verdict type
  * \tparam AC an access controller type
- * \tparam F an integrity modification function type */
+ * \tparam F an integrity modification function type
+ * \test in file test_entity.cpp */
 template <integrity I, access_controller M, operation O, verdict V, access_controller AC, integrity_function F>
 requires std::default_initializable<AC> && std::default_initializable<F>
 class basic_entity {
