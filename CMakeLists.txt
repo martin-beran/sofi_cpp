@@ -26,6 +26,7 @@ set(
 ### BEGIN Build configuration #################################################
 option(USE_LIBC++ "Use libc++ instead of libstdc++" OFF)
 option(USE_LTO "Use LTO (link time, interprocedural optimization)" ON)
+option(TEST_COVERAGE "Build and run tests with coverage analysis" OFF)
 
 set(
     BUILD_TYPE "RelWithDebInfo" CACHE STRING
@@ -46,6 +47,10 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ${USE_LTO})
+
+if (TEST_COVERAGE AND NOT CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+    message(FATAL_ERROR "Coverage analysis available only for Clang")
+endif()
 
 set_property(CACHE SANITIZER PROPERTY STRINGS ${SANITIZERS})
 if (NOT SANITIZER IN_LIST SANITIZERS)
@@ -94,6 +99,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
 endif()
 if (CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     add_compile_options(-Wimplicit-fallthrough=5)
+endif()
+if (TEST_COVERAGE)
+    add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
+    add_link_options(-fprofile-instr-generate -fcoverage-mapping)
 endif()
 if (NOT SANITIZER STREQUAL "OFF")
     add_compile_options(
@@ -177,4 +186,5 @@ message(
 )
 message(STATUS "Use libc++:   ${USE_LIBC++}")
 message(STATUS "Use LTO:      ${USE_LTO}")
+message(STATUS "Coverage:     ${TEST_COVERAGE}")
 message(STATUS "Sanitizer:    ${SANITIZER}")
