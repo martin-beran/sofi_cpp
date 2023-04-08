@@ -27,6 +27,23 @@ enum class op_id {
     test_rd_wr,
 };
 
+} // namespace
+
+SOFICPP_IMPL_ENUM_STR_INIT(op_id) {
+    SOFICPP_IMPL_ENUM_STR_VAL(op_id, test_no_flow),
+    SOFICPP_IMPL_ENUM_STR_VAL(op_id, test_rd),
+    SOFICPP_IMPL_ENUM_STR_VAL(op_id, test_wr),
+    SOFICPP_IMPL_ENUM_STR_VAL(op_id, test_rd_wr),
+};
+
+namespace {
+
+std::ostream& operator<<(std::ostream& os, op_id v)
+{
+    os << soficpp::enum2str(v);
+    return os;
+}
+
 class op_no_flow: public soficpp::operation_base<op_id> {
 public:
     [[nodiscard]] id_t id() const override { return op_id::test_no_flow; }
@@ -63,6 +80,14 @@ public:
 //! \cond
 BOOST_AUTO_TEST_CASE(operation_base)
 {
+    {
+        std::unique_ptr<const soficpp::operation_base<op_id>> op = std::make_unique<soficpp::operation_base<op_id>>();
+        BOOST_CHECK(!op->is_read());
+        BOOST_CHECK(!op->is_write());
+        BOOST_CHECK(op->key() == op_id::test_no_flow);
+        BOOST_CHECK(op->id() == op_id::test_no_flow);
+        BOOST_CHECK(op->name().empty());
+    }
     {
         std::unique_ptr<const soficpp::operation_base<op_id>> op = std::make_unique<op_no_flow>();
         BOOST_CHECK(!op->is_read());
@@ -164,6 +189,14 @@ struct acl_data {
     bool test;
 };
 
+struct ops_acl_data {
+    std::map<operation::key_t, std::vector<integrity>> i_acl;
+    std::vector<integrity> i_default;
+    integrity i_subj;
+    op_id op;
+    bool test;
+};
+
 std::ostream& operator<<(std::ostream& os, const acl_single_data& v)
 {
     os << "{i_acl=" << v.i_acl << ",i_subj=" << v.i_subj << ",test=" << v.test << "}";
@@ -178,6 +211,27 @@ std::ostream& operator<<(std::ostream& os, const acl_data& v)
         d = ",";
     }
     os << "},i_subj=" << v.i_subj << ",test=" << v.test << "}";
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const ops_acl_data& v)
+{
+    os << "{i_acl={";
+    for (std::string_view md{}; auto&& me: v.i_acl) {
+        os << md << me.first << "->{";
+        for (std::string_view vd{}; auto&& ve: me.second) {
+            os << vd << ve;
+            vd = ",";
+        }
+        os << "}";
+        md = ",";
+    }
+    os << "},i_default={";
+    for (std::string_view d{}; auto&& e: v.i_default) {
+        os << d << e;
+        d = ",";
+    }
+    os << "},i_subj=" << v.i_subj << ",op=" << v.op << ",test=" << v.test << "}";
     return os;
 }
 
@@ -259,6 +313,134 @@ BOOST_DATA_TEST_CASE(acl, (std::array{
          {soficpp::controller_test::access, soficpp::controller_test::min_subj, soficpp::controller_test::min_obj})
     {
         BOOST_CHECK(acl.test(sample.i_subj, op, v, k) == sample.test);
+    }
+}
+//! \endcond
+
+/*! \file
+ * \test \c ops_acl -- Test of class soficpp::ops_acl */
+//! \cond
+BOOST_DATA_TEST_CASE(ops_acl, (std::array{
+    ops_acl_data{.i_acl = {},
+        .i_default = {}, .i_subj = integrity{}, .op = op_id::test_no_flow, .test = false},
+    ops_acl_data{.i_acl = {},
+        .i_default = {integrity{}}, .i_subj = integrity{}, .op = op_id::test_rd, .test = true},
+    ops_acl_data{.i_acl = {},
+        .i_default = {integrity{universe{}}}, .i_subj = integrity{}, .op = op_id::test_wr, .test = false},
+    ops_acl_data{.i_acl = {},
+        .i_default = {integrity{set_t{"i1"}}}, .i_subj = integrity{set_t{"i1", "i2"}}, .test = true},
+    ops_acl_data{.i_acl = {{op_id::test_no_flow, {}}},
+        .i_default = {integrity{}}, .i_subj = integrity{universe{}}, .op = op_id::test_no_flow, .test = false},
+    ops_acl_data{.i_acl = {{op_id::test_no_flow, {}}},
+        .i_default = {integrity{}}, .i_subj = integrity{universe{}}, .op = op_id::test_rd_wr, .test = true},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i1", "i3"}}, .op = op_id::test_no_flow, .test = true},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i2"}}, .op = op_id::test_no_flow, .test = false},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i1", "i3"}}, .op = op_id::test_rd, .test = true},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i2"}}, .op = op_id::test_rd, .test = false},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i1", "i3"}}, .op = op_id::test_wr, .test = false},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i2"}}, .op = op_id::test_wr, .test = true},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i1", "i3"}}, .op = op_id::test_rd_wr, .test = true},
+    ops_acl_data{.i_acl = {{op_id::test_rd, {integrity{set_t{"i1"}}}}, {op_id::test_wr, {integrity{set_t{"i2"}}}}},
+        .i_default = {integrity{set_t{"i3"}}},
+        .i_subj = integrity{set_t{"i2"}}, .op = op_id::test_rd_wr, .test = false},
+}))
+{
+    ops_acl_t acl{sample.i_default};
+    for (auto&& a: sample.i_acl)
+        acl[a.first] = std::make_shared<typename ops_acl_t::acl_t>(a.second);
+    std::unique_ptr<const soficpp::operation_base<op_id>> op;
+    switch (sample.op) {
+    case op_id::test_no_flow:
+        op = std::make_unique<op_no_flow>();
+        break;
+    case op_id::test_rd:
+        op = std::make_unique<op_rd>();
+        break;
+    case op_id::test_wr:
+        op = std::make_unique<op_wr>();
+        break;
+    case op_id::test_rd_wr:
+        op = std::make_unique<op_rd_wr>();
+        break;
+    default:
+        BOOST_REQUIRE(false);
+    }
+    verdict v;
+    for (auto k:
+         {soficpp::controller_test::access, soficpp::controller_test::min_subj, soficpp::controller_test::min_obj})
+    {
+        BOOST_CHECK(acl.test(sample.i_subj, *op, v, k) == sample.test);
+    }
+}
+//! \endcond
+
+/*! \file
+ * \test \c ops_acl_null_default -- Test of class soficpp::ops_acl with \c
+ * nullptr default inner ACL */
+//! \cond
+BOOST_AUTO_TEST_CASE(ops_acl_null_default)
+{
+    ops_acl_t acl{};
+    verdict v;
+    for (auto k:
+         {soficpp::controller_test::access, soficpp::controller_test::min_subj, soficpp::controller_test::min_obj})
+    {
+        BOOST_CHECK(!acl.test(integrity{}, op_no_flow{}, v, k));
+        BOOST_CHECK(!acl.test(integrity{}, op_rd{}, v, k));
+        BOOST_CHECK(!acl.test(integrity{}, op_wr{}, v, k));
+        BOOST_CHECK(!acl.test(integrity{}, op_rd_wr{}, v, k));
+    }
+    acl[op_id::test_rd] = std::make_shared<ops_acl_t::acl_t>(ops_acl_t::acl_t{integrity{}});
+    for (auto k:
+         {soficpp::controller_test::access, soficpp::controller_test::min_subj, soficpp::controller_test::min_obj})
+    {
+        BOOST_CHECK(!acl.test(integrity{}, op_no_flow{}, v, k));
+        BOOST_CHECK(acl.test(integrity{}, op_rd{}, v, k));
+        BOOST_CHECK(!acl.test(integrity{}, op_wr{}, v, k));
+        BOOST_CHECK(!acl.test(integrity{}, op_rd_wr{}, v, k));
+    }
+}
+//! \endcond
+
+/*! \file
+ * \test \c ops_acl_null_acl -- Test of class soficpp::ops_acl with \c nullptr
+ * inner ACL in the map */
+//! \cond
+BOOST_AUTO_TEST_CASE(ops_acl_null_acl)
+{
+    ops_acl_t acl{ops_acl_t::acl_t{integrity{}}};
+    verdict v;
+    for (auto k:
+         {soficpp::controller_test::access, soficpp::controller_test::min_subj, soficpp::controller_test::min_obj})
+    {
+        BOOST_CHECK(acl.test(integrity{}, op_no_flow{}, v, k));
+        BOOST_CHECK(acl.test(integrity{}, op_rd{}, v, k));
+        BOOST_CHECK(acl.test(integrity{}, op_wr{}, v, k));
+        BOOST_CHECK(acl.test(integrity{}, op_rd_wr{}, v, k));
+    }
+    acl[op_id::test_no_flow] = nullptr;
+    acl[op_id::test_wr] = nullptr;
+    for (auto k:
+         {soficpp::controller_test::access, soficpp::controller_test::min_subj, soficpp::controller_test::min_obj})
+    {
+        BOOST_CHECK(!acl.test(integrity{}, op_no_flow{}, v, k));
+        BOOST_CHECK(acl.test(integrity{}, op_rd{}, v, k));
+        BOOST_CHECK(!acl.test(integrity{}, op_wr{}, v, k));
+        BOOST_CHECK(acl.test(integrity{}, op_rd_wr{}, v, k));
     }
 }
 //! \endcond

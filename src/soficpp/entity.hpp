@@ -260,7 +260,7 @@ public:
     /*! \param[in] c a container of identity values */
     acl(const container_t& c): container_t(c) {}
     //! Move-like construction from an object of the base class
-    /*! \param[in] c a container of identity values */
+    /*! \param[in] c a container of integrity values */
     acl(container_t&& c): container_t(std::move(c)) {}
     //! The access test function for testing access during an operation.
     /*! \param[in] subj the integrity of the subject
@@ -298,16 +298,32 @@ template <class I, class O, class V, template <class...> class  C = std::vector,
          class A = acl<I, O, V, C>, template <class...> class M = std::map>
 class ops_acl: public M<typename O::key_t, std::shared_ptr<A>> {
 public:
+    //! The inner ACL type
+    using acl_t = A;
     //! The map (associative container) type
-    using map_t = M<typename O::key_t, std::shared_ptr<A>>;
+    using map_t = M<typename O::key_t, std::shared_ptr<acl_t>>;
     //! The integrity type
     using integrity_t = I;
     //! The operation type
     using operation_t = O;
     //! The verdict type
     using verdict_t = V;
-    //! The ACL used for operations not found in the operation-specific ACLs
-    typename map_t::mapped_type default_op{};
+    //! Default constructor
+    /*! It creates the empty map and \c nullptr default inner ACL, causing
+     * result \c false for all calls of test() */
+    ops_acl() = default;
+    //! A copy-like construction from a default inner ACL.
+    /*! \param[in] acl a default inner ACL */
+    explicit ops_acl(const acl_t& acl): default_op{std::make_shared<acl_t>(acl)} {}
+    //! A copy-like construction from a default inner ACL.
+    /*! \param[in] acl a default inner ACL */
+    explicit ops_acl(const std::shared_ptr<acl_t>& acl): default_op{acl} {}
+    //! A move-like construction from a default inner ACL.
+    /*! \param[in] acl a default inner ACL */
+    explicit ops_acl(acl_t&& acl): default_op{std::make_shared<acl_t>(std::move(acl))} {}
+    //! A move-like construction from a default inner ACL.
+    /*! \param[in] acl a default inner ACL */
+    explicit ops_acl(std::shared_ptr<acl_t>&& acl): default_op{std::move(acl)} {}
     //! The access test function for testing access during an operation.
     /*! \param[in] subj the integrity of the subject
      * \param[in] op the operation
@@ -317,16 +333,18 @@ public:
     bool test(const I& subj, const O& op, V& v, [[maybe_unused]] controller_test kind) {
         if (auto a = this->find(op.key()); a != this->end()) {
             if (a->second)
-                return a->second->test(subj, op, v);
+                return a->second->test(subj, op, v, kind);
             else
                 return false;
         } else {
             if (default_op)
-                return default_op->test(subj, op, v);
+                return default_op->test(subj, op, v, kind);
             else
                 return false;
         }
     }
+    //! The ACL used for operations not found in the operation-specific ACLs
+    std::shared_ptr<acl_t> default_op{};
 private:
     using map_t::map_t;
 };
