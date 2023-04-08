@@ -600,7 +600,6 @@ static_assert(integrity_function<safe_integrity_fun<integrity_single, operation_
  * \arg functions test_fun(), \c prov_fun(), \c recv_fun() returning the
  * integrity testing, providing, and receiving functions
  * \arg function \c integrity() that sets the integrity of the entity
- * \arg function \c min_integrity() that sets the minimum integrity of the entity
  * \tparam T an entity type */
 template <class T> concept entity =
     std::is_object_v<T> &&
@@ -618,7 +617,6 @@ template <class T> concept entity =
         { c_entity.prov_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         { c_entity.recv_fun() } -> std::same_as<const typename T::integrity_fun_t&>;
         entity.integrity(i);
-        entity.min_integrity(m);
     };
 
 //! A straightforward class template that satisfies concept soficpp::entity.
@@ -654,6 +652,21 @@ public:
     /*! \return the integrity */
     [[nodiscard]] const I& integrity() const noexcept {
         return _integrity;
+    }
+    //! Gets the current integrity.
+    /*! \return the integrity */
+    [[nodiscard]] I& integrity() noexcept {
+        return _integrity;
+    }
+    //! Sets the current integrity.
+    /*! \param[in] i the new integrity */
+    void integrity(const I& i) {
+        _integrity = i;
+    }
+    //! Sets the current integrity.
+    /*! \param[in] i the new integrity */
+    void integrity(I&& i) {
+        _integrity = std::move(i);
     }
     //! Gets the minimum integrity.
     /*! \return the minimum integrity */
@@ -704,36 +717,6 @@ public:
     /*! \return the function */
     [[nodiscard]] F& recv_fun() noexcept {
         return _recv_fun;
-    }
-    //! Sets the current integrity.
-    /*! \param[in] val the new value */
-    void integrity(integrity_t val) {
-        _integrity = std::move(val);
-    }
-    //! Sets the minimum integrity.
-    /*! \param[in] val the new value */
-    void min_integrity(min_t val) {
-        _min_integrity = std::move(val);
-    }
-    //! Sets the access controller.
-    /*! \param[in] val the new value */
-    void access_ctrl(AC val) {
-        _access_ctrl = std::move(val);
-    }
-    //! Sets the integrity testing function.
-    /*! \param[in] val the new value */
-    void test_fun(F val) {
-        _test_fun = std::move(val);
-    }
-    //! Sets the integrity providing function.
-    /*! \param[in] val the new value */
-    void prov_fun(F val) {
-        _prov_fun = std::move(val);
-    }
-    //! Sets the integrity receiving function.
-    /*! \param[in] val the new value */
-    void recv_fun(F val) {
-        _recv_fun = std::move(val);
     }
 private:
     //! The current integrity
