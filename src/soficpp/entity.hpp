@@ -402,6 +402,10 @@ public:
     using integrity_t = I;
     //! The operation type
     using operation_t = O;
+    //! Default constructor, creates the identity function.
+    /*! The created function is unsafe by default, returning the unmodified
+     * argument \a i. */
+    dyn_integrity_fun() = default;
     //! Calls the stored target function
     /*! \param[in] i an itegrity value to be modified while passed from a
      * source to a destination object
@@ -437,18 +441,21 @@ public:
         return f;
     }
     //! Gets an identity function
-    /*! \return the function object; always safe */
+    /*! \return the function object; always safe, returning the argument \a i
+     * limited by \a limit */
     static dyn_integrity_fun identity() {
         dyn_integrity_fun f{};
         f.safe(true);
         return f;
     }
-    //! Gets a function always returning the limit indentity
-    /*! \return the function object; always safe */
+    //! Gets a function always returning the maximum indentity,
+    /*! \return the function object; always safe, returning \a limit */
     static dyn_integrity_fun max() {
         dyn_integrity_fun f{[](auto&&, auto&& limit, auto&&) {
             return limit;
         }};
+        f.safe(true);
+        return f;
     }
 private:
     //! The stored safety status of this function
