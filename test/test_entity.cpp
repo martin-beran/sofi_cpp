@@ -537,5 +537,300 @@ BOOST_AUTO_TEST_CASE(dyn_integrity_fun)
                     (integrity{set_t{"i1", "i3"}}));
         BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
     }
+    {
+        soficpp::dyn_integrity_fun<integrity, operation> f{
+            [](const integrity&, const integrity&, const operation&) {
+                return integrity{set_t{"i1", "i4"}};
+            }};
+        BOOST_CHECK(!f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        f.safe(true);
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+    }
+}
+//! \endcond
+
+/*! \file
+ * \test integrity_fun -- Test of class soficpp::integrity_fun */
+//! \cond
+BOOST_AUTO_TEST_CASE(integrity_fun)
+{
+    {
+        soficpp::integrity_fun<integrity, operation> f;
+        BOOST_CHECK(!f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        auto f = soficpp::integrity_fun<integrity, operation>::identity();
+        BOOST_CHECK(!f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        auto f = soficpp::integrity_fun<integrity, operation>::min();
+        BOOST_CHECK(!f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{});
+    }
+    {
+        auto f = soficpp::integrity_fun<integrity, operation>::max();
+        BOOST_CHECK(!f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        soficpp::integrity_fun<integrity, operation> f{
+            [](const integrity&, const integrity&, const operation&) {
+                return integrity{set_t{"i1", "i4"}};
+            }};
+        BOOST_CHECK(!f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+    }
+    {
+        soficpp::integrity_fun<integrity, operation, true> f;
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        auto f = soficpp::integrity_fun<integrity, operation, true>::identity();
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        auto f = soficpp::integrity_fun<integrity, operation, true>::min();
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{});
+    }
+    {
+        auto f = soficpp::integrity_fun<integrity, operation, true>::max();
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        soficpp::integrity_fun<integrity, operation, true> f{
+            [](const integrity&, const integrity&, const operation&) {
+                return integrity{set_t{"i1", "i4"}};
+            }};
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+    }
+}
+//! \endcond
+
+/*! \file
+ * \test safe_integrity_fun -- Test of class soficpp::safe_integrity_fun */
+//! \cond
+BOOST_AUTO_TEST_CASE(safe_integrity_fun)
+{
+    {
+        soficpp::safe_integrity_fun<integrity, operation> f;
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        auto f = soficpp::safe_integrity_fun<integrity, operation>::identity();
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i2"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        auto f = soficpp::safe_integrity_fun<integrity, operation>::min();
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{});
+    }
+    {
+        auto f = soficpp::safe_integrity_fun<integrity, operation>::max();
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == integrity{});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1", "i3"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == integrity{universe{}});
+    }
+    {
+        soficpp::safe_integrity_fun<integrity, operation> f{
+            [](const integrity&, const integrity&, const operation&) {
+                return integrity{set_t{"i1", "i4"}};
+            }};
+        BOOST_CHECK(f.safe());
+        BOOST_CHECK(f(integrity{}, integrity{}, operation{}) == (integrity{}));
+        BOOST_CHECK(f(integrity{}, integrity{set_t{"i1", "i3"}}, operation{}) == (integrity{set_t{"i1"}}));
+        BOOST_CHECK(f(integrity{}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{}, operation{}) == (integrity{}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{set_t{"i1", "i3"}}, operation{}) ==
+                    (integrity{set_t{"i1"}}));
+        BOOST_CHECK(f(integrity{set_t{"i1", "i2"}}, integrity{universe{}}, operation{}) ==
+                    (integrity{set_t{"i1", "i4"}}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{}, operation{}) == (integrity{}));
+        BOOST_CHECK(f(integrity{universe{}}, integrity{set_t{"i1", "i3"}}, operation{}) == integrity{set_t{"i1"}});
+        BOOST_CHECK(f(integrity{universe{}}, integrity{universe{}}, operation{}) == (integrity{set_t{"i1", "i4"}}));
+    }
+}
+//! \endcond
+
+/*! \file
+ * \test basic_entity -- Test of class soficpp::basic_entity */
+//! \cond
+BOOST_AUTO_TEST_CASE(basic_entity)
+{
+    soficpp::basic_entity<integrity, acl_t, operation, verdict, acl_t,
+        soficpp::safe_integrity_fun<integrity, operation>> entity{};
+    BOOST_CHECK(entity.integrity() == integrity{});
+    BOOST_CHECK(entity.min_integrity().empty());
 }
 //! \endcond

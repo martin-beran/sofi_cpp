@@ -558,7 +558,7 @@ public:
      * no target function */
     I operator()(const I& i, const I& limit, const O& op) const {
         if (*this)
-            return base_t::operator()(i, limit, op);
+            return base_t::operator()(i, limit, op) * limit;
         else
             return i * limit;
     }
@@ -582,7 +582,7 @@ public:
     //! Gets a function always returning the limit indentity
     /*! \return the function object; always safe */
     static safe_integrity_fun max() {
-        return integrity_fun{[](auto&&, auto&& limit, auto&&) {
+        return safe_integrity_fun{[](auto&&, auto&& limit, auto&&) {
             return limit;
         }};
     }
@@ -722,15 +722,15 @@ private:
     //! The current integrity
     integrity_t _integrity = integrity_t::min();
     //! The minimum integrity
-    min_t _min_integrity = integrity_t::min();
+    min_t _min_integrity{};
     //! The access controller
     access_ctrl_t _access_ctrl{};
     //! The testing function
-    integrity_fun_t _test_fun = I::identity();
+    integrity_fun_t _test_fun = F::identity();
     //! The integrity providing function
-    integrity_fun_t _prov_fun = I::min();
+    integrity_fun_t _prov_fun = F::min();
     //! The integrity receiving function
-    integrity_fun_t _recv_fun = I::min();
+    integrity_fun_t _recv_fun = F::min();
 };
 
 static_assert(entity<basic_entity<
