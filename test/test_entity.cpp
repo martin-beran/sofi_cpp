@@ -8,7 +8,6 @@
  */
 
 //! \cond
-#include "soficpp/entity.hpp"
 #include "soficpp/soficpp.hpp"
 #include <concepts>
 #include <stdexcept>
@@ -16,7 +15,6 @@
 #define BOOST_TEST_MODULE entity
 #include <boost/test/included/unit_test.hpp>
 #include <boost/test/data/test_case.hpp>
-
 
 namespace {
 

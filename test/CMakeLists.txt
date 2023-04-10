@@ -6,7 +6,9 @@ link_libraries(
 
 set(
     TEST_PROGRAMS
+    agent
     dummy_boost
+    engine
     entity
     enum_str
     integrity

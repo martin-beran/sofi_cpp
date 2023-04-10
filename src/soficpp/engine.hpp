@@ -2,6 +2,8 @@
 
 /*! \file
  * \brief SOFI engine -- operations and enforcing SOFI rules
+ *
+ * \test in file test_engine.cpp
  */
 
 #include "entity.hpp"
@@ -17,7 +19,8 @@ namespace soficpp {
  * logging. The main member function for SOFI operations is operation(). There
  * are other public member functions called by operation() that provide access
  * to parts of operation processing.
- * \tparam E an entity type */
+ * \tparam E an entity type
+ * \test in file test_engine.cpp */
 template <entity E> class engine {
 public:
     //! The entity type

@@ -2,6 +2,8 @@
 
 /*! \file
  * \brief DiSOFI -- distributed DiSOFI
+ *
+ * \test in file test_agent.cpp
  */
 
 #include "entity.hpp"
@@ -69,7 +71,8 @@ template <class T> concept agent =
  * The entity and the message are of the same type and a it must be copy
  * assignable. The result of an export or import can be controlled by setting
  * the appropriate member of type agent_result prior to the operation.
- * \tparam T a type of both entity and message */
+ * \tparam T a type of both entity and message
+ * \test in file test_agent.cpp */
 template <entity T> requires std::is_copy_assignable_v<T> class copy_agent {
 public:
     //! The entity type
