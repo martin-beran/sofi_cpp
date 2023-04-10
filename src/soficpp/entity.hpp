@@ -193,8 +193,9 @@ template <class T> concept access_controller =
     integrity<typename T::integrity_t> &&
     operation<typename T::operation_t> &&
     verdict<typename T::verdict_t> &&
-    requires (T ctrl, const typename T::integrity_t subj, const typename T::operation_t op, typename T::verdict_t v,
-              controller_test kind) {
+    requires (const T ctrl, const typename T::integrity_t subj, const typename T::operation_t op,
+              typename T::verdict_t v, controller_test kind)
+    {
         { ctrl.test(subj, op, v, kind) } -> std::same_as<bool>;
     };
 
@@ -224,7 +225,8 @@ public:
      * \param[in, out] v the verdict
      * \param[in] kind the kind of test performed by the current call
      * \return \c true if operation is allowed, \c false if denied */
-    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v, [[maybe_unused]] controller_test kind)
+    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v,
+              [[maybe_unused]] controller_test kind) const
     {
         return subj >= integrity;
     }
@@ -258,17 +260,18 @@ public:
     using verdict_t = V;
     //! Copy-like construction from an object of the base class
     /*! \param[in] c a container of identity values */
-    acl(const container_t& c): container_t(c) {}
+    explicit acl(const container_t& c): container_t(c) {}
     //! Move-like construction from an object of the base class
     /*! \param[in] c a container of integrity values */
-    acl(container_t&& c): container_t(std::move(c)) {}
+    explicit acl(container_t&& c): container_t(std::move(c)) {}
     //! The access test function for testing access during an operation.
     /*! \param[in] subj the integrity of the subject
      * \param[in] op the operation
      * \param[in, out] v the verdict
      * \param[in] kind the kind of test performed by the current call
      * \return \c true if operation is allowed, \c false if denied */
-    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v, [[maybe_unused]] controller_test kind)
+    bool test(const I& subj, [[maybe_unused]] const O& op, [[maybe_unused]] V& v,
+              [[maybe_unused]] controller_test kind) const
     {
         for (auto&& i: *this)
             if (subj >= i)
@@ -330,7 +333,7 @@ public:
      * \param[in, out] v the verdict
      * \param[in] kind the kind of test performed by the current call
      * \return \c true if operation is allowed, \c false if denied */
-    bool test(const I& subj, const O& op, V& v, [[maybe_unused]] controller_test kind) {
+    bool test(const I& subj, const O& op, V& v, [[maybe_unused]] controller_test kind) const {
         if (auto a = this->find(op.key()); a != this->end()) {
             if (a->second)
                 return a->second->test(subj, op, v, kind);

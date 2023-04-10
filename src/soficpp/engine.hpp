@@ -100,7 +100,7 @@ public:
     {
         verdict_t verdict{};
         init_verdict(subj, obj, op, execute, verdict);
-        bool allow = obj.access_ctrl().test(subj, op, verdict, controller_test::access);
+        bool allow = obj.access_ctrl().test(subj.integrity(), op, verdict, controller_test::access);
         verdict.access_test(allow);
         after_test_access(subj, obj, op, execute, verdict, allow);
         return {verdict, allow};
@@ -144,10 +144,10 @@ public:
     {
         bool allow_min_subj = true;
         bool allow_min_obj = true;
-        if (i_obj()) {
+        if (i_obj) {
             allow_min_obj = obj.min_integrity().test(*i_obj, op, v, controller_test::min_obj);
         }
-        if (i_subj()) {
+        if (i_subj) {
             allow_min_subj = subj.min_integrity().test(*i_subj, op, v, controller_test::min_subj);
         }
         v.min_test(allow_min_subj && allow_min_obj);
@@ -181,18 +181,6 @@ protected:
                                    [[maybe_unused]] const operation_t& op, [[maybe_unused]] bool execute,
                                    [[maybe_unused]] verdict_t& v, [[maybe_unused]] bool allow)
     {}
-    //! Called when a an operation is to be executed.
-    /*! It is called by operation() just before return, after the integrities
-     * of the subject and object are adjusted, when the operation is to be
-     * executed, that is, operation() is called with \c true in \a execute and
-     * the operation is allowed.
-     * \param[in, out] subj the subject of the operation
-     * \param[in, out] obj the object of the operation
-     * \param[in] op the operation
-     * \param[in, out] v the verdict object */
-    virtual void execute_op([[maybe_unused]] entity_t& subj, [[maybe_unused]] entity_t& obj,
-                            [[maybe_unused]] const operation_t& op, [[maybe_unused]] verdict_t& v)
-    {}
     //! Called after the minimum integrities are tested and the result is stored in the verdict.
     /*! The default implementation does nothing.
      * \param[in] subj the subject of the operation
@@ -216,6 +204,18 @@ protected:
                                 [[maybe_unused]] bool allow_min_subj,
                                 [[maybe_unused]] const std::optional<integrity_t>& i_obj,
                                 [[maybe_unused]] bool allow_min_obj)
+    {}
+    //! Called when a an operation is to be executed.
+    /*! It is called by operation() just before return, after the integrities
+     * of the subject and object are adjusted, when the operation is to be
+     * executed, that is, operation() is called with \c true in \a execute and
+     * the operation is allowed.
+     * \param[in, out] subj the subject of the operation
+     * \param[in, out] obj the object of the operation
+     * \param[in] op the operation
+     * \param[in, out] v the verdict object */
+    virtual void execute_op([[maybe_unused]] entity_t& subj, [[maybe_unused]] entity_t& obj,
+                            [[maybe_unused]] const operation_t& op, [[maybe_unused]] verdict_t& v)
     {}
 };
 

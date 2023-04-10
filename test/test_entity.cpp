@@ -358,7 +358,7 @@ BOOST_DATA_TEST_CASE(ops_acl, (std::array{
         .i_subj = integrity{set_t{"i2"}}, .op = op_id::test_rd_wr, .test = false},
 }))
 {
-    ops_acl_t acl{sample.i_default};
+    ops_acl_t acl{ops_acl_t::acl_t{sample.i_default}};
     for (auto&& a: sample.i_acl)
         acl[a.first] = std::make_shared<typename ops_acl_t::acl_t>(a.second);
     std::unique_ptr<const operation> op;
