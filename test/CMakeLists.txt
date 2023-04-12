@@ -37,7 +37,7 @@ endforeach()
 if (TEST_COVERAGE)
     add_custom_target(
         report_coverage
-        COMMAND llvm-profdata merge -sparse -o ${CMAKE_CURRENT_BINARY_DIR}/test.profraw ${PROFRAW}
+        COMMAND llvm-profdata merge -o ${CMAKE_CURRENT_BINARY_DIR}/test.profraw ${PROFRAW}
         COMMAND llvm-cov show -format=html -instr-profile=test.profraw -Xdemangler=c++filt -Xdemangler=-n
             -output-dir=${CMAKE_CURRENT_BINARY_DIR}/coverage_html ${PROFBIN}
     )
