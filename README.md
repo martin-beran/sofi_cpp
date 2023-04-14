@@ -44,6 +44,11 @@ There is a CMake configuration to build and run tests:
     cmake --build build -j `nproc`
     cmake --build build -t test
 
+## Experimenting with the library
+
+There is an experimental SOFI system controlled by program `sofi_cpp`, with
+persistent state stored in an SQLite databse.
+
 ## Documentation
 
     cmake --build build -t doc doxygen
