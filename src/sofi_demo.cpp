@@ -56,6 +56,10 @@ int cmd_init(std::string_view file)
             select 0, json_array() union
             select -1, "universe" union
             select id, json_group_array(elem) from integrity group by id)",
+        R"(create trigger integrity_json_insert instead of insert on integrity_json
+            begin
+                insert into integrity select new.id, e.value from json_each(new.elems) as e;
+            end)",
     }) {
         sqlite::query(db, sql).start().next_row();
     }
