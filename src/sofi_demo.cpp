@@ -48,18 +48,93 @@ int usage(const char* argv0, std::string_view msg)
 int cmd_init(std::string_view file)
 {
     sqlite::connection db{std::string{file}, true};
+    // Set WAL mode (persistent)
+    sqlite::query(db, R"(pragma journal_mode=wal)").start().next_row();
+    // Check foreign key constrains, must be set for every connection outside of transactions
+    sqlite::query(db, R"(pragma foreign_keys=true)").start().next_row();
     sqlite::transaction tr{db};
     for (const auto& sql: {
-        // Integrity reserved ids: 0 = empty set (minimum), -1 = universe (maximum)
-        R"(create table integrity (id int, elem text, primary key (id, elem), check (id > 0)) without rowid, strict)",
+        // Stores IDs of integrity values. This table is needed in order to use
+        // integrity IDs as a foreign key, because a foreign key must be the
+        // primary key or have a unique index.
+        R"(create table integrity_id (id integer primary key))",
+        // Stores integrity values. Rows with the same ID define a single
+        // integrity, either as a non-empty set of strings, or as the empty set
+        // (if there is one row with EMPTY=TRUE), or as the universe set
+        // (lattice maximum, if there is one row with UNIVERSE=TRUE)
+        R"(create table integrity (
+                id int references integrity_id(id) on delete restrict on update restrict,
+                elem text default '', empty int default false, universe int default false,
+                primary key (id, elem, empty, universe),
+                constraint id_not_negative check (id >= 0),
+                constraint empty_bool check (empty == false or empty == true),
+                constraint universe_bool check (universe == false or universe == true),
+                constraint elem_or_empty_or_universe check (
+                    (elem != '' and not empty and not universe) or
+                    (elem == '' and empty and not universe) or
+                    (elem == '' and not empty and universe)
+                )
+            ) without rowid, strict)",
+        // Insertable JSON view of integrity values stored in table INTEGRITY,
+        // one row for each integrity, represented as an (possibly empty) array
+        // of strings, or a single string "universe"
         R"(create view integrity_json(id, elems) as
-            select 0, json_array() union
-            select -1, "universe" union
-            select id, json_group_array(elem) from integrity group by id)",
+            select
+                i.id,
+                case
+                    when exists (select 1 from integrity where id == i.id and universe) then json_quote('universe')
+                    when exists (select 1 from integrity where id == i.id and elem != '') then
+                        (select json_group_array(elem) from integrity where id == i.id)
+                    else json_array()
+                end
+            from integrity as i group by id)",
         R"(create trigger integrity_json_insert instead of insert on integrity_json
             begin
-                insert into integrity select new.id, e.value from json_each(new.elems) as e;
+                insert or ignore into integrity_id values (new.id);
+                insert into integrity(id, universe) select new.id, 1 where new.elems == json_quote('universe');
+                insert into integrity(id, empty) select new.id, 1 where new.elems == json_array();
+                insert into integrity(id, elem)
+                    select new.id, e.value from json_each(new.elems) as e where json_type(new.elems) == 'array';
             end)",
+        // Stores operation definitions, identified by operation NAME.
+        R"(create table operations (
+                name text primary key, is_read int not null, is_write int not null,
+                rw_type text generated always as (
+                    case
+                        when not is_read and not is_write then 'no-flow'
+                        when is_read and not is_write then 'read'
+                        when not is_read and is_write then 'write'
+                        when is_read and is_write then 'read-write'
+                    end
+                ) stored
+            ) without rowid, strict)",
+        // Stores IDs of ACL values. This table is needed in order to use
+        // ACL IDs as a foreign key, because a foreign key must be the
+        // primary key or have a unique index.
+        R"(create table acls_id (id integer primary key))",
+        // Stores ACLs. Rows with the same ID define a single ACL with
+        // semantics of soficpp::ops_acl containing soficpp::acl. That is,
+        // there is an entry for each operation OP, and a default entry (with
+        // NULL OP) controlling operations without specific entries. Each entry
+        // is a (possibly empty, represented by NULL) set of integrities INT_ID. 
+        R"(create table acls (
+                id int not null references acls_id(id) on delete restrict on update restrict,
+                op text references operations(name) on delete restrict on update restrict,
+                integrity int references integrity_id(id) on delete restrict on update restrict
+            ) strict)",
+        // Insertable view of table ACLS that automatically adds missing ACL
+        // IDs to table ACLS_ID
+        R"(create view acls_ins as select * from acls)",
+        R"(create trigger acls_ins_insert instead of insert on acls_ins
+            begin
+                insert or ignore into acls_id values (new.id);
+                insert into acls values (new.id, new.op, new.integrity);
+            end)",
+        // Read-only view of ACLs that displays integrities in JSON format
+        R"(create view acls_json(id, op, integrity) as
+            select acls.id as id , acls.op as op, integrity_json.elems as integrity
+            from acls join integrity_json on acls.integrity = integrity_json.id
+            order by id, op)",
     }) {
         sqlite::query(db, sql).start().next_row();
     }
@@ -73,6 +148,8 @@ int cmd_init(std::string_view file)
 int cmd_run(std::string_view file)
 {
     sqlite::connection db{std::string{file}, false};
+    // Check foreign key constrains, must be set for every connection outside of transactions
+    sqlite::query(db, R"(pragma foreign_keys=1)").start().next_row();
     return EXIT_SUCCESS;
 }
 
