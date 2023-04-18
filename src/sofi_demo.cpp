@@ -56,45 +56,41 @@ int cmd_init(std::string_view file)
     for (const auto& sql: {
         // Stores IDs of integrity values. This table is needed in order to use
         // integrity IDs as a foreign key, because a foreign key must be the
-        // primary key or have a unique index.
-        R"(create table integrity_id (id integer primary key))",
+        // primary key or have a unique index. If UNIVERSE is TRUE, then
+        // elements with this ID in table INTEGRITY are ignored.
+        R"(create table integrity_id (
+                id integer primary key,
+                universe int not null default false,
+                constraint integrity_id_not_negative check (id >= 0),
+                constraint universe_bool check (universe == false or universe == true)
+            ))",
         // Stores integrity values. Rows with the same ID define a single
-        // integrity, either as a non-empty set of strings, or as the empty set
-        // (if there is one row with EMPTY=TRUE), or as the universe set
-        // (lattice maximum, if there is one row with UNIVERSE=TRUE)
+        // integrity. If there is no row in INTEGRITY for an ID from
+        // INTEGRITY_ID, then the integrity is either the empty set (lattice
+        // minimum) or the lattice maximum, depending on INTEGRITY_ID.UNIVERSE.
         R"(create table integrity (
                 id int references integrity_id(id) on delete restrict on update restrict,
-                elem text default '', empty int default false, universe int default false,
-                primary key (id, elem, empty, universe),
-                constraint id_not_negative check (id >= 0),
-                constraint empty_bool check (empty == false or empty == true),
-                constraint universe_bool check (universe == false or universe == true),
-                constraint elem_or_empty_or_universe check (
-                    (elem != '' and not empty and not universe) or
-                    (elem == '' and empty and not universe) or
-                    (elem == '' and not empty and universe)
-                )
+                elem text,
+                primary key (id, elem),
+                constraint integrity_elem_not_empty check (elem != '')
             ) without rowid, strict)",
         // Insertable JSON view of integrity values stored in table INTEGRITY,
         // one row for each integrity, represented as an (possibly empty) array
         // of strings, or a single string "universe"
         R"(create view integrity_json(id, elems) as
             select
-                i.id,
+                id,
                 case
-                    when exists (select 1 from integrity where id == i.id and universe) then json_quote('universe')
-                    when exists (select 1 from integrity where id == i.id and elem != '') then
-                        (select json_group_array(elem) from integrity where id == i.id)
+                    when universe then json_quote('universe')
+                    when exists (select * from integrity where id == iid.id) then
+                        (select json_group_array(elem) from integrity where id == iid.id)
                     else json_array()
                 end
-            from integrity as i group by id)",
+            from integrity_id as iid)",
         R"(create trigger integrity_json_insert instead of insert on integrity_json
             begin
-                insert or ignore into integrity_id values (new.id);
-                insert into integrity(id, universe) select new.id, 1 where new.elems == json_quote('universe');
-                insert into integrity(id, empty) select new.id, 1 where new.elems == json_array();
-                insert into integrity(id, elem)
-                    select new.id, e.value from json_each(new.elems) as e where json_type(new.elems) == 'array';
+                insert into integrity_id values (new.id, new.elems == json_quote('universe')) on conflict do nothing;
+                insert into integrity select new.id, e.value from json_each(new.elems) as e;
             end)",
         // Stores operation definitions, identified by operation NAME.
         R"(create table operations (
@@ -106,12 +102,18 @@ int cmd_init(std::string_view file)
                         when not is_read and is_write then 'write'
                         when is_read and is_write then 'read-write'
                     end
-                ) stored
+                ) stored,
+                constraint op_name_not_empty check (name != ''),
+                constraint is_read_bool check (is_read == false or is_read == true),
+                constraint is_write_bool check (is_write == false or is_write == true)
             ) without rowid, strict)",
         // Stores IDs of ACL values. This table is needed in order to use
         // ACL IDs as a foreign key, because a foreign key must be the
         // primary key or have a unique index.
-        R"(create table acls_id (id integer primary key))",
+        R"(create table acls_id (
+                id integer primary key,
+                constraint acl_id_not_negative check (id >= 0)
+            ))",
         // Stores ACLs. Rows with the same ID define a single ACL with
         // semantics of soficpp::ops_acl containing soficpp::acl. That is,
         // there is an entry for each operation OP, and a default entry (with
@@ -120,14 +122,15 @@ int cmd_init(std::string_view file)
         R"(create table acls (
                 id int not null references acls_id(id) on delete restrict on update restrict,
                 op text references operations(name) on delete restrict on update restrict,
-                integrity int references integrity_id(id) on delete restrict on update restrict
+                integrity int references integrity_id(id) on delete restrict on update restrict,
+                unique (id, op, integrity)
             ) strict)",
         // Insertable view of table ACLS that automatically adds missing ACL
         // IDs to table ACLS_ID
         R"(create view acls_ins as select * from acls)",
         R"(create trigger acls_ins_insert instead of insert on acls_ins
             begin
-                insert or ignore into acls_id values (new.id);
+                insert into acls_id values (new.id) on conflict do nothing;
                 insert into acls values (new.id, new.op, new.integrity);
             end)",
         // Read-only view of ACLs that displays integrities in JSON format
