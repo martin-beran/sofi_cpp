@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 //! Interface to database SQLite 3
 /*! This is only a thin wrapper around the native SQLite C API. Consult
@@ -30,6 +31,10 @@ namespace sqlite {
 class connection;
 class query;
 class transaction;
+
+//! The type used for blob values
+/*! \note It must a different type than \c std::string. */
+using blob_t = std::vector<unsigned char>;
 
 //! A prepared SQLite query
 /*! The query object can be executed multiple times. Before each execution,
@@ -59,14 +64,14 @@ public:
      * \arg column_type::ct_null -- \c std::nullptr
      * \arg column_type::ct_int64 -- \c int64_t
      * \arg column_type::ct_double -- \c double
-     * \arg column_type::ct_string -- \c std::string (the first occurrence)
-     * \arg column_type::ct_blob -- \c std::string (the second occurrence) */
+     * \arg column_type::ct_string -- \c std::string
+     * \arg column_type::ct_blob -- \c blob_t */
     using column_value = std::variant<
         std::nullptr_t,
         int64_t,
         double,
         std::string,
-        std::string
+        blob_t
     >;
     //! Creates a prepared SQL query
     /*! It just prepares the query, but does not start its execution.
@@ -75,8 +80,8 @@ public:
     explicit query(connection& db, std::string sql);
     //! No copy
     query(const query&) = delete;
-    //! No move
-    query(query&&) = delete;
+    //! Default move
+    query(query&&) noexcept;
     //! Destroys the prepared statement and frees associated resources
     ~query();
     //! No copy
@@ -98,6 +103,11 @@ public:
      * \param[in] v the parameter value (always \c std::nullptr)
      * \return \c *this */
     query& bind(int i, std::nullptr_t v);
+    //! Binds a query parameter to a Boolean value converted to integer
+    /*! \param[in] i parameter index (starting from 1)
+     * \param[in] v the parameter value
+     * \return \c *this */
+    query& bind(int i, bool v);
     //! Binds a query parameter to an integer value
     /*! \param[in] i parameter index (starting from 1)
      * \param[in] v the parameter value
@@ -113,11 +123,16 @@ public:
      * \param[in] v the parameter value
      * \return \c *this */
     query& bind(int i, const std::string& v);
+    //! Binds a query parameter to a string view value
+    /*! \param[in] i parameter index (starting from 1)
+     * \param[in] v the parameter value
+     * \return \c *this */
+    query& bind(int i, std::string_view v);
     //! Binds a query parameter to a blob value
     /*! \param[in] i parameter index (starting from 1)
      * \param[in] v the parameter value
      * \return \c *this */
-    query& bind_blob(int i, const std::string& v);
+    query& bind(int i, const blob_t& v);
     //! Gets the number of columns in the query result.
     /*! \return the number of columns */
     int column_count();

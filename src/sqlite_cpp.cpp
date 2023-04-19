@@ -144,46 +144,56 @@ query::query(connection& db, std::string sql):
 {
 }
 
+query::query(query&&) noexcept = default;
+
 query::~query() = default;
 
 query& query::bind(int i, std::nullptr_t)
 {
-    if (sqlite3_bind_null(_impl->stmt, i + 1) != SQLITE_OK)
+    if (sqlite3_bind_null(_impl->stmt, i) != SQLITE_OK)
         throw error("sqlite3_bind_null", _db, _sql);
+    return *this;
+}
+
+query& query::bind(int i, bool v)
+{
+    if (sqlite3_bind_int64(_impl->stmt, i, int64_t(v)) != SQLITE_OK)
+        throw error("sqlite3_bind_int64", _db, _sql);
     return *this;
 }
 
 query& query::bind(int i, int64_t v)
 {
-    if (sqlite3_bind_int64(_impl->stmt, i + 1, v) != SQLITE_OK)
+    if (sqlite3_bind_int64(_impl->stmt, i, v) != SQLITE_OK)
         throw error("sqlite3_bind_int64", _db, _sql);
     return *this;
 }
 
 query& query::bind(int i, double v)
 {
-    if (sqlite3_bind_double(_impl->stmt, i + 1, v) != SQLITE_OK)
+    if (sqlite3_bind_double(_impl->stmt, i, v) != SQLITE_OK)
         throw error("sqlite3_bind_double", _db, _sql);
     return *this;
 }
 
 query& query::bind(int i, const std::string& v)
 {
-    if (sqlite3_bind_text(_impl->stmt, i + 1, v.c_str(), int(v.size()),
-                          SQLITE_STATIC) != SQLITE_OK)
-    {
+    if (sqlite3_bind_text(_impl->stmt, i, v.c_str(), int(v.size()), SQLITE_STATIC) != SQLITE_OK)
         throw error("sqlite3_bind_text", _db, _sql);
-    }
     return *this;
 }
 
-query& query::bind_blob(int i, const std::string& v)
+query& query::bind(int i, std::string_view v)
 {
-    if (sqlite3_bind_blob(_impl->stmt, i + 1, v.c_str(), int(v.size()),
-                          SQLITE_STATIC) != SQLITE_OK)
-    {
+    if (sqlite3_bind_text(_impl->stmt, i, v.data(), int(v.size()), SQLITE_STATIC) != SQLITE_OK)
+        throw error("sqlite3_bind_text", _db, _sql);
+    return *this;
+}
+
+query& query::bind(int i, const blob_t& v)
+{
+    if (sqlite3_bind_blob(_impl->stmt, i, v.data(), int(v.size()), SQLITE_STATIC) != SQLITE_OK)
         throw error("sqlite3_bind_blob", _db, _sql);
-    }
     return *this;
 }
 
@@ -203,15 +213,13 @@ query::column_value query::get_column(int i)
     case SQLITE_FLOAT:
         return sqlite3_column_double(_impl->stmt, i);
     case SQLITE_TEXT:
-        return column_value(
-            std::in_place_index<int(column_type::ct_string)>,
-            reinterpret_cast<const char*>(sqlite3_column_text(_impl->stmt, i)),
-            sqlite3_column_bytes(_impl->stmt, i));
+        return std::string(reinterpret_cast<const char*>(sqlite3_column_text(_impl->stmt, i)),
+                           size_t(sqlite3_column_bytes(_impl->stmt, i)));
     case SQLITE_BLOB:
-        return column_value(
-            std::in_place_index<int(column_type::ct_blob)>,
-            reinterpret_cast<const char*>(sqlite3_column_blob(_impl->stmt, i)),
-            sqlite3_column_bytes(_impl->stmt, i));
+        {
+            auto b = reinterpret_cast<const unsigned char*>(sqlite3_column_blob(_impl->stmt, i));
+            return blob_t(b, b + sqlite3_column_bytes(_impl->stmt, i));
+        }
     }
 }
 
