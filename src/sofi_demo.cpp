@@ -92,6 +92,8 @@ int cmd_init(std::string_view file)
                 insert into integrity_id values (new.id, new.elems == json_quote('universe')) on conflict do nothing;
                 insert into integrity select new.id, e.value from json_each(new.elems) as e;
             end)",
+        // Insert minimum and maximum integrity
+        R"(insert into integrity_json values (0, '[]'), (1, '"universe"'))",
         // Stores operation definitions, identified by operation NAME.
         R"(create table operations (
                 name text primary key, is_read int not null, is_write int not null,
@@ -107,6 +109,9 @@ int cmd_init(std::string_view file)
                 constraint is_read_bool check (is_read == false or is_read == true),
                 constraint is_write_bool check (is_write == false or is_write == true)
             ) without rowid, strict)",
+        // Insert one operation of each kind
+        R"(insert into operations values
+                ('no_flow', false, false), ('read', true, false), ('write', false, true), ('read_write', true, true))",
         // Stores IDs of ACL values. This table is needed in order to use
         // ACL IDs as a foreign key, because a foreign key must be the
         // primary key or have a unique index.
@@ -136,8 +141,57 @@ int cmd_init(std::string_view file)
         // Read-only view of ACLs that displays integrities in JSON format
         R"(create view acls_json(id, op, integrity) as
             select acls.id as id , acls.op as op, integrity_json.elems as integrity
-            from acls join integrity_json on acls.integrity = integrity_json.id
+            from acls left join integrity_json on acls.integrity = integrity_json.id
             order by id, op)",
+        // Insert ACLs that deny all operations and allow all operations
+        R"(insert into acls_ins values (0, null, null), (1, null, 0))",
+        // Read-only view of ACLs that selects values usable as minimum integrity
+        R"(create view min_integrity as select id, integrity from acls where op is null)",
+        // JSON value of MIN_INTEGRITY
+        R"(create view min_integrity_json as select id, integrity from acls_json where op is null)",
+        // Stores IDs of INT_FUN values. This table is needed in order to use
+        // integrity function IDs as a foreign key, because a foreign key must
+        // be the primary key or have a unique index.
+        R"(create table int_fun_id (
+                id integer primary key,
+                comment text default '',
+                constraint int_fun_id_not_negative check (id >= 0)
+            ))",
+        // Stores integrity modification functions, usable as test, providing,
+        // and receiving functions of entities. Each function is a set of pairs
+        // of integrities. When evaluating a function, the integrity passed as
+        // the argument is compared to the first integrity (CMP) in each pair.
+        // If the argument is greater or equal, then all elements of the second
+        // integrity (PLUS) in the pair is added to the function result. If the
+        // second integrity of a pair is NULL, then all elements of the
+        // argument are added to the result.
+        R"(create table int_fun (
+                id int not null references int_fun_id(id) on delete restrict on update restrict,
+                cmp int not null references integrity_id(id) on delete restrict on update restrict,
+                plus int references integrity_id(id) on delete restrict on update restrict,
+                unique (id, cmp)
+            ) strict)",
+        // Insertable view of table INT_FUN that automatically adds missing
+        // function IDs to table INT_FUN_ID
+        R"(create view int_fun_ins as
+            select fi.id as id, f.cmp as cmp, f.plus as plus, fi.comment as comment
+            from int_fun_id as fi join int_fun as f using (id))",
+        R"(create trigger int_fun_ins_insert instead of insert on int_fun_ins
+            begin
+                insert into int_fun_id values (new.id, new.comment) on conflict do nothing;
+                insert into int_fun values (new.id, new.cmp, new.plus);
+            end)",
+        // Read-only view of int_fun that displays integrities in JSON format
+        R"(create view int_fun_json(id, cmp, plus, comment) as
+            select f.id, c.elems, a.elems, fi.comment
+            from
+                int_fun_id as fi
+                join int_fun as f using (id)
+                left join integrity_json as c on f.cmp == c.id
+                left join integrity_json as a on f.plus == a.id
+            order by f.id)",
+        // Insert a minimum integrity, identity, and maximum integrity functions
+        R"(insert into int_fun_ins values (0, 0, 0, 'min'), (1, 0, null, 'identity'), (2, 0, 1, 'max'))",
     }) {
         sqlite::query(db, sql).start().next_row();
     }
