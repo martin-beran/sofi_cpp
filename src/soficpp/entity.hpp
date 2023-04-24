@@ -125,7 +125,8 @@ public:
     //! Default constructor, initializes the verdict to denied.
     explicit constexpr simple_verdict() = default;
     //! Gets the stored verdict.
-    /*! \return the verdict */
+    /*! It returns the same value as allowed().
+     * \return the verdict */
     explicit constexpr operator bool() const {
         return allowed();
     }

@@ -20,13 +20,16 @@
  * statements and comments in cmd_init().
  */
 
+#include "soficpp/agent.hpp"
 #include "soficpp/enum_str.hpp"
 #include "soficpp/soficpp.hpp"
 #include "sqlite_cpp.hpp"
 
+#include <cassert>
 #include <cstddef>
 #include <deque>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 
 //! SOFI classes used by program \c sofi_demo
@@ -52,6 +55,7 @@ enum class op_id {
 
 } // namespace demo
 
+//! \cond
 SOFICPP_IMPL_ENUM_STR_INIT(demo::op_id) {
     SOFICPP_IMPL_ENUM_STR_VAL(demo::op_id, no_op),
     SOFICPP_IMPL_ENUM_STR_VAL(demo::op_id, read),
@@ -66,6 +70,7 @@ SOFICPP_IMPL_ENUM_STR_INIT(demo::op_id) {
     SOFICPP_IMPL_ENUM_STR_VAL(demo::op_id, clone),
     SOFICPP_IMPL_ENUM_STR_VAL(demo::op_id, destroy),
 };
+//! \endcond
 
 namespace demo {
 
@@ -83,6 +88,8 @@ public:
     verdict() = default;
     //! Indication of an operation failure caused by other reasons than SOFI
     bool error = false;
+    //! Indication of an operation destroying its object
+    bool destroy = false;
 };
 
 //! A base class for defining operations
@@ -91,6 +98,7 @@ public:
     //! The type of map of operations
     using ops_map_t = std::map<op_id, std::unique_ptr<operation>>;
     [[nodiscard]] std::string_view name() const override {
+        std::lock_guard lck(_mtx);
         if (_name.empty())
             _name = soficpp::enum2str(id());
         return _name;
@@ -102,8 +110,18 @@ public:
      * \param[out] result the result object, the operation result is stored in
      * verdict::error. */
     void execute(entity& subject, entity& object, const::std::string& arg, verdict& result) const {
+        _destroy_object = false;
         if (!do_exec(subject, object, arg))
             result.error = true;
+        else
+            if (_destroy_object)
+                result.destroy = true;
+    }
+    //! Stores a database connection that can be used by do_exec() called in the current thread.
+    /*! \param[in] db a database connection, or \c nullptr to unregisted any
+     * stored database connection */
+    static void attach_db(sqlite::connection* db = nullptr) {
+        _db = db;
     }
     //! Gets the map of all operations.
     /*! \return the map containing all known operations */
@@ -126,24 +144,91 @@ protected:
     {
         return true;
     }
+    //! Can be called by do_exec() to request destroying the object of the current operation in the current thread.
+    static void destroy_object() {
+        _destroy_object = true;
+    }
+    static thread_local sqlite::connection* _db; //!< A database connection that can be used by do_exec()
 private:
-    mutable std::string _name; //!< Cached result of name()
+    mutable std::mutex _mtx{}; //!< A mutex for _name
+    mutable std::string _name{}; //!< Cached result of name()
+    static thread_local bool _destroy_object; //!< Used by execute() and destroy_object()
 };
+
+thread_local sqlite::connection* operation::_db = nullptr;
+thread_local bool operation::_destroy_object = false;
 
 //! The access controller (ACL) type
 using acl = soficpp::ops_acl<integrity, operation, verdict>;
 
 //! The type for minimum integrity of an entity
-using min_integrity = soficpp::acl_single<integrity, operation, verdict>;
+using min_integrity = soficpp::acl<integrity, operation, verdict>;
 
 //! The type an integrity modification function
 using integrity_fun = soficpp::safe_integrity_fun<integrity, operation>;
 
+//! The entity type
 class entity: public soficpp::basic_entity<integrity, min_integrity, operation, verdict, acl, integrity_fun> {
 public:
+    //! The name of the entity, used as the primary key in the database
+    std::string name{};
     //! Data of the entity, usable in operations
     std::string data{};
 };
+
+//! The agent class that exports to and imports from the database
+class agent {
+public:
+    //! The entity type
+    using entity_t = entity;
+    //! The message type is the name of the entity in the database
+    using message_t = std::string;
+    //! Creates the agent.
+    /*! \param[in] db a database connection used for export and import */
+    explicit agent(sqlite::connection& db): db(db) {}
+    //! The export operation
+    /*! It saves the entity to the database.
+     * \param[in] e an entity
+     * \param[out] m a message
+     * \return the result of export */
+    soficpp::agent_result export_msg(const entity_t& e, message_t& m);
+    //! The import operation
+    /*! It reads the entity from the database.
+     * \param[in] m a message (an entity name)
+     * \param[out] e an entity
+     * \return the result of import */
+    soficpp::agent_result import_msg(const message_t& m, entity_t& e);
+private:
+    sqlite::connection& db; //!< Stored database connection used by export_msg() and import_msg()
+};
+
+soficpp::agent_result agent::export_msg(const entity_t& e, message_t& m)
+{
+    try {
+        (void) e;
+        (void) m;
+        (void) db;
+        // TODO
+    } catch (const sqlite::error& e) {
+        std::cerr << e.what();
+        return soficpp::agent_result{soficpp::agent_result::error};
+    }
+    return soficpp::agent_result{soficpp::agent_result::success};
+}
+
+soficpp::agent_result agent::import_msg(const message_t& m, entity_t& e)
+{
+    try {
+        (void) m;
+        (void) e;
+        (void) db;
+        // TODO
+    } catch (const sqlite::error& e) {
+        std::cerr << e.what();
+        return soficpp::agent_result{soficpp::agent_result::error};
+    }
+    return soficpp::agent_result{soficpp::agent_result::success};
+}
 
 //! The implementation of op_id::no_op
 class operation_no_op: public operation {
@@ -270,6 +355,9 @@ protected:
 };
 
 //! The implementation of op_id::set_integrity
+/*! The new integrity is passed as the argument of the operation in the sane
+ * JSON format as used by database view \c integrity_json: it is either the
+ * string \c "universe", or a JSON array containing string elements. */
 class operation_set_integrity: public operation {
 public:
     [[nodiscard]] bool is_write() const override {
@@ -278,14 +366,54 @@ public:
     [[nodiscard]] id_t id() const override {
         return op_id::set_integrity;
     }
+    //! Parses an integrity from a string.
+    /*! \param[in] s an integrity in JSON format
+     * \return the integrity; \c std::nullopt if no database connection has
+     * been attached to this thread by attach_db() or if \a s is invalid */
+    static std::optional<integrity> str2integrity(const std::string& s) {
+        integrity::set_t i{};
+        if (!_db)
+            goto error;
+        for (auto q = std::move(sqlite::query{*_db,
+                                R"(select key, value, type from json_each(?1))"}.start().bind(1, s));
+            q.next_row() == sqlite::query::status::row;)
+        {
+            assert(q.column_count() == 3);
+            auto type = q.get_column(2);
+            if (auto t = std::get_if<std::string>(&type); !t || *t != "text")
+                goto error;
+            auto key = q.get_column(0);
+            auto value = q.get_column(1);
+            if (auto v = std::get_if<std::string>(&value)) {
+                if (auto k = std::get_if<std::nullptr_t>(&key)) {
+                    if (*v != "universe")
+                        goto error;
+                    else
+                        return integrity{integrity::universe{}};
+                } else
+                    i.insert(*v);
+            } else
+                goto error;
+        }
+        return integrity{std::move(i)};
+error:
+        std::cerr << "Invalid integrity JSON value " << s << std::endl;
+        return std::nullopt;
+    }
 protected:
-    bool do_exec(entity&, entity&, const std::string&) const override {
-        // TODO
-        return false;
+    bool do_exec(entity&, entity& object, const std::string& arg) const override {
+        if (auto i = str2integrity(arg)) {
+            object.integrity(std::move(*i));
+            return true;
+        } else
+            return false;
     }
 };
 
 //! The implementation of op_id::set_min_integrity
+/*! The new minimum integrity is passed in the argument of the operation as a
+ * JSON array of integrities, with each integrity in the format used by
+ * operation_set_integrity. */
 class operation_set_min_integrity: public operation {
 public:
     [[nodiscard]] bool is_write() const override {
@@ -294,10 +422,39 @@ public:
     [[nodiscard]] id_t id() const override {
         return op_id::set_min_integrity;
     }
+    //! Parses a minimum integrity from a string.
+    /*! \param[in] s a JSON array of integrities
+     * \return the minimum integrity; \c std::nullopt if no database connection
+     * has been attached to this thread by attach_db() or if \a s is invalid */
+    static std::optional<min_integrity> str2min_integrity(const std::string& s) {
+        min_integrity::container_t ic{};
+        if (!_db)
+            goto error;
+        for (auto q = std::move(sqlite::query{*_db, R"(select value from json_each(?1))"}.start().bind(1, s));
+            q.next_row() == sqlite::query::status::row;)
+        {
+            assert(q.column_count() == 1);
+            auto value = q.get_column(0);
+            if (auto v = std::get_if<std::string>(&value)) {
+                if (auto i = operation_set_integrity::str2integrity(*v))
+                    ic.push_back(std::move(*i));
+                else
+                    goto error;
+            } else
+                goto error;
+        }
+        return min_integrity{std::move(ic)};
+error:
+        std::cerr << "Invalid minimum integrity JSON value " << s << std::endl;
+        return std::nullopt;
+    }
 protected:
-    bool do_exec(entity&, entity&, const std::string&) const override {
-        // TODO
-        return false;
+    bool do_exec(entity&, entity& object, const std::string& arg) const override {
+        if (auto i = str2min_integrity(arg)) {
+            object.min_integrity() = std::move(*i);
+            return true;
+        } else
+            return false;
     }
 };
 
@@ -308,9 +465,19 @@ public:
         return op_id::clone;
     }
 protected:
-    bool do_exec(entity&, entity&, const std::string&) const override {
-        // TODO
-        return false;
+    bool do_exec(entity&, entity& object, const std::string& arg) const override {
+        if (!_db)
+            return false;
+        entity cloned = object;
+        cloned.name = arg;
+        agent a{*_db};
+        std::string exported_clone;
+        if (!a.export_msg(cloned, exported_clone)) {
+            std::cerr << "Cannot export cloned object \"" << cloned.name << "\"" << std::endl;
+            return EXIT_FAILURE;
+        }
+        assert(cloned.name == exported_clone);
+        return true;
     }
 };
 
@@ -322,8 +489,8 @@ public:
     }
 protected:
     bool do_exec(entity&, entity&, const std::string&) const override {
-        // TODO
-        return false;
+        destroy_object();
+        return true;
     }
 };
 
@@ -353,12 +520,11 @@ const operation& operation::get(op_id id)
     auto& ops = get();
     if (auto it = ops.find(id); it != ops.end() && it->second)
         return *it->second;
-    throw std::invalid_argument("Unknown operation name " + soficpp::enum2str(id));
+    throw std::invalid_argument("Unknown operation id " + soficpp::enum2str(id));
 }
 
-//! The agent class that exports to and imports from the database
-class agent {
-};
+//! The engine class
+using engine = soficpp::engine<entity>;
 
 } // namespace demo
 
@@ -378,6 +544,7 @@ struct op_record {
     bool access = false; //!< Result of the SOFI access test
     bool min = false; //!< Result of the SOFI minimum integrity test
     bool error = true; //!< Result: whether the operation failed for a non-SOFI reason
+    bool destroy = false; //!< Result: whether the operation destroyed the object
 };
 
 //! Displays a short help
@@ -603,21 +770,17 @@ int cmd_init(std::string_view file)
     return EXIT_SUCCESS;
 }
 
-//! Executes SOFI operation in a database
-/*! \param[in] file the database file name
- * \return program exit code */
-int cmd_run(std::string_view file)
+//! Gets all operation requests from the database.
+/*! \param[in] db a database connection
+ * \return the operation requests */
+std::deque<op_record> get_op_requests(sqlite::connection& db)
 {
-    sqlite::connection db{std::string{file}, false};
-    // Check foreign key constrains, must be set for every connection outside of transactions
-    sqlite::query(db, R"(pragma foreign_keys=1)").start().next_row();
-    // Read all operation requests
     std::deque<op_record> ops;
-    for (auto q = std::move(sqlite::query{db, R"(select * from request order by id)"}.start());
+    for (auto q = std::move(sqlite::query{db,
+                            R"(select id, subject, object, op, arg, comment from request order by id)"}.start());
          q.next_row() == sqlite::query::status::row;)
     {
-        if (q.column_count() != 6)
-            throw std::runtime_error("Unexpected number of columns in table REQUEST");
+        assert(q.column_count() != 6);
         op_record op{};
         auto get_val = [&q]<class T>(int i, T& v, bool null = false) {
             auto c = q.get_column(i);
@@ -642,19 +805,75 @@ int cmd_run(std::string_view file)
         get_val(5, op.comment, true);
         ops.push_back(std::move(op));
     }
+    return ops;
+}
+
+//! Executes SOFI operation in a database
+/*! \param[in] file the database file name
+ * \return program exit code */
+int cmd_run(std::string_view file)
+{
+    sqlite::connection db{std::string{file}, false};
+    // Check foreign key constrains, must be set for every connection outside of transactions
+    sqlite::query(db, R"(pragma foreign_keys=1)").start().next_row();
+    // Read all operation requests
+    std::deque<op_record> ops = get_op_requests(db);
     // Execute operations
+    demo::engine engine{};
+    demo::agent agent{db};
+    sqlite::query sql_del_request{db, R"(delete from request where id = ?1)"};
+    sqlite::query sql_ins_result{db, R"(insert into result values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10))"};
+    sqlite::query sql_del_entity{db, R"(delete from entity where name = ?1)"};
     for (auto& o: ops) {
         std::cout << "BEGIN " << o.id << ": " << o.comment << std::endl;
         sqlite::transaction tr{db};
-        sqlite::query{db, R"(delete from request where id = ?1)"}.start().bind(1, o.id).next_row();
-        // TODO
-        sqlite::query{db, R"(insert into result values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10))"}.start().
+        sql_del_request.start().bind(1, o.id).next_row();
+        demo::entity subject;
+        if (!agent.import_msg(o.subject, subject)) {
+            std::cerr << "Cannot import subject \"" << o.subject << "\"" << std::endl;
+            return EXIT_FAILURE;
+        }
+        assert(o.subject == subject.name);
+        demo::entity object;
+        if (!agent.import_msg(o.object, object)) {
+            std::cerr << "Cannot import object \"" << o.object << "\"" << std::endl;
+            return EXIT_FAILURE;
+        }
+        assert(o.object == object.name);
+        assert(o.op);
+        demo::verdict verdict = engine.operation(subject, object, *o.op);
+        if (verdict) {
+            demo::operation::attach_db(&db);
+            o.op->execute(subject, object, o.arg, verdict);
+            demo::operation::attach_db();
+        }
+        o.allowed = verdict.allowed();
+        o.access = verdict.access_test();
+        o.min = verdict.min_test();
+        o.error = verdict.error;
+        std::string exported_subject{};
+        std::string exported_object{};
+        if (!agent.export_msg(subject, exported_subject)) {
+            std::cerr << "Cannot export subject \"" << subject.name << "\"" << std::endl;
+            return EXIT_FAILURE;
+        }
+        assert(subject.name == exported_subject);
+        if (o.destroy)
+            sql_del_entity.start().bind(1, object.name).next_row();
+        else {
+            if (!agent.export_msg(object, exported_object)) {
+                std::cerr << "Cannot export object \"" << object.name << "\"" << std::endl;
+                return EXIT_FAILURE;
+            }
+            assert(object.name == exported_object);
+        }
+        sql_ins_result.start().
             bind(1, o.id).bind(2, o.subject).bind(3, o.object).bind(4, o.op->name()).bind(5, o.arg).bind(6, o.comment).
             bind(7, o.allowed).bind(8, o.access).bind(9, o.min).bind(10, o.error).
             next_row();
         tr.commit();
         std::cout << "END   " << o.id << " allowed=" << o.allowed <<
-            " access=" << o.access << " min=" << o.min << " error=" << o.error << std::endl;
+            " access=" << o.access << " min=" << o.min << " error=" << o.error << " destroy=" << o.destroy << std::endl;
     }
     return EXIT_SUCCESS;
 }
