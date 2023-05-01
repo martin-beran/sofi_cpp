@@ -30,7 +30,9 @@
 #include <deque>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
+#include <variant>
 
 //! SOFI classes used by program \c sofi_demo
 namespace demo {
@@ -167,6 +169,39 @@ using min_integrity = soficpp::acl<integrity, operation, verdict>;
 //! The type an integrity modification function
 using integrity_fun = soficpp::safe_integrity_fun<integrity, operation>;
 
+class integrity_fun_def: public std::vector<std::pair<integrity, std::optional<integrity>>> {
+    //! The base class
+    using base_t = std::vector<std::pair<integrity, std::optional<integrity>>>;
+    using base_t::base_t;
+public:
+    //! Evaluates the integrity function
+    /*! It tests \a i against all elements (pairs) in this vector. If \a i is
+     * greater or equal to the first integrity in a pair, then then all
+     * elements of the second integrity in the pair are added to the result. If
+     * the second value in the pair is \c nullopt, then \a i is added to the
+     * result.
+     * \param[in] i an integrity
+     * \param[in] limit a limit for the result (unused)
+     * \param[in] op an operation (unused)
+     * \return the modified integrity */
+    integrity operator()(const integrity& i, const integrity& limit, const operation& op);
+    //! The comment of the integrity
+    std::string comment;
+};
+
+integrity integrity_fun_def::operator()(const integrity& i, const integrity&, const operation&)
+{
+    integrity result{};
+    for (auto&& v: *this)
+         if (v.first <= i) {
+             if (v.second)
+                 result = result + *v.second;
+             else
+                 result = result + i;
+         }
+    return result;
+}
+
 //! The entity type
 class entity: public soficpp::basic_entity<integrity, min_integrity, operation, verdict, acl, integrity_fun> {
 public:
@@ -185,7 +220,7 @@ public:
     using message_t = std::string;
     //! Creates the agent.
     /*! \param[in] db a database connection used for export and import */
-    explicit agent(sqlite::connection& db): db(db) {}
+    explicit agent(sqlite::connection& db);
     //! The export operation
     /*! It saves the entity to the database.
      * \param[in] e an entity
@@ -199,15 +234,56 @@ public:
      * \return the result of import */
     soficpp::agent_result import_msg(const message_t& m, entity_t& e);
 private:
-    sqlite::connection& db; //!< Stored database connection used by export_msg() and import_msg()
+    //! Thrown if something cannot be exported or imported
+    struct export_import_error: public std::runtime_error {
+        //! Creates the exception object.
+        export_import_error(): runtime_error("export_import_error") {}
+    };
+    //! Imports an integrity from the database by id
+    /*! \param[in] id the id of the integrity
+     * \return the imported integrity
+     * \throw export_import_error if the integrity cannot be imported */
+    integrity import_msg_integrity(int64_t id);
+    //! Imports a minimum integrity from the database by id
+    /*! \param[in] id the id of the minimum integrity
+     * \return the imported integrity
+     * \throw export_import_error if the minimum integrity cannot be imported */
+    min_integrity import_msg_min_integrity(int64_t id);
+    //! Imports an ACL from the database by id
+    /*! \param[in] id the id of the ACL
+     * \return the imported ACL
+     * \throw export_import_error if the ACL cannot be imported */
+    acl import_msg_acl(int64_t id);
+    //! Imports an integrity modification function from the database by id
+    /*! \param[in] id the id of the function
+     * \return the imported function
+     * \throw export_import_error if the function cannot be imported */
+    integrity_fun import_msg_int_fun(int64_t id);
+    sqlite::query qexp_entity; //!< SQL query for exporting an entity
+    sqlite::query qimp_entity; //!< SQL query for importing an entity
+    sqlite::query qimp_integrity; //!< SQL query for importing an integrity
+    sqlite::query qimp_min_integrity; //!< SQL query for importing a minimum integrity
+    sqlite::query qimp_acl; //!< SQL query for importing an ACL
+    sqlite::query qimp_int_fun; //!< SQL query for importing an integrity modification function
 };
+
+agent::agent(sqlite::connection& db):
+    qexp_entity(db, R"()"),
+    qimp_entity(db, R"(
+        select name, integrity, min_integrity, access_ctrl, test_fun, prov_fun, recv_fun, data
+        from entity where name = $1)"),
+    qimp_integrity(db, R"(select universe, elem from integrity_id left join integrity using (id) where id == $1)"),
+    qimp_min_integrity(db, R"(select integrity from min_integrity where id = $1 and integrity is not null)"),
+    qimp_acl(db, R"(select op, integrity fro acl where id = $1)"),
+    qimp_int_fun(db, R"(select comment, cmp, plus from int_fun_id left join int_fun using (id) where id = $1)")
+{
+}
 
 soficpp::agent_result agent::export_msg(const entity_t& e, message_t& m)
 {
     try {
         (void) e;
         (void) m;
-        (void) db;
         // TODO
     } catch (const sqlite::error& e) {
         std::cerr << e.what();
@@ -219,15 +295,154 @@ soficpp::agent_result agent::export_msg(const entity_t& e, message_t& m)
 soficpp::agent_result agent::import_msg(const message_t& m, entity_t& e)
 {
     try {
-        (void) m;
-        (void) e;
-        (void) db;
-        // TODO
+        qimp_entity.start().bind(1, m);
+        if (qimp_entity.next_row() == sqlite::query::status::done)
+            return soficpp::agent_result{soficpp::agent_result::error};
+        assert(qimp_entity.column_count() == 8);
+        if (auto v = qimp_entity.get_column(0); auto p = std::get_if<std::string>(&v))
+            e.name = *p;
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+        if (auto v = qimp_entity.get_column(1); auto p = std::get_if<int64_t>(&v))
+            e.integrity() = import_msg_integrity(*p);
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+        if (auto v = qimp_entity.get_column(2); auto p = std::get_if<int64_t>(&v))
+            e.min_integrity() = import_msg_min_integrity(*p);
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+        if (auto v = qimp_entity.get_column(3); auto p = std::get_if<int64_t>(&v))
+            e.access_ctrl() = import_msg_acl(*p);
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+        if (auto v = qimp_entity.get_column(4); auto p = std::get_if<int64_t>(&v))
+            e.test_fun() = import_msg_int_fun(*p);
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+        if (auto v = qimp_entity.get_column(5); auto p = std::get_if<int64_t>(&v))
+            e.prov_fun() = import_msg_int_fun(*p);
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+        if (auto v = qimp_entity.get_column(6); auto p = std::get_if<int64_t>(&v))
+            e.recv_fun() = import_msg_int_fun(*p);
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+        if (auto v = qimp_entity.get_column(7); auto p = std::get_if<std::string>(&v))
+            e.data = *p;
+        else
+            return soficpp::agent_result{soficpp::agent_result::error};
+    } catch (const export_import_error&) {
+        return soficpp::agent_result{soficpp::agent_result::error};
     } catch (const sqlite::error& e) {
         std::cerr << e.what();
         return soficpp::agent_result{soficpp::agent_result::error};
     }
     return soficpp::agent_result{soficpp::agent_result::success};
+}
+
+acl agent::import_msg_acl(int64_t id)
+{
+    qimp_acl.start().bind(1, id);
+    acl result;
+    while (qimp_acl.next_row() == sqlite::query::status::row) {
+        assert(qimp_acl.column_count() == 2);
+        auto& pacl = [&, this]() -> std::shared_ptr<acl::acl_t>& {
+            auto v = qimp_acl.get_column(0);
+            if (std::holds_alternative<std::nullptr_t>(v))
+                return result.default_op;
+            else if (auto p = std::get_if<std::string>(&v))
+                try {
+                    return result[soficpp::str2enum<op_id>(*p)];
+                } catch (const std::invalid_argument&) {
+                    throw export_import_error{};
+                }
+            else
+                throw export_import_error{};
+        }();
+        if (!pacl)
+            pacl = std::make_shared<acl::acl_t>();
+        auto v = qimp_acl.get_column(1);
+        if (std::holds_alternative<std::nullptr_t>(v))
+            ;
+        else if (auto p = std::get_if<int64_t>(&v))
+            pacl->push_back(import_msg_integrity(*p));
+        else
+            throw export_import_error{};
+    }
+    return result;
+}
+
+integrity_fun agent::import_msg_int_fun(int64_t id)
+{
+    qimp_int_fun.start().bind(1, id);
+    integrity_fun_def result;
+    while (qimp_int_fun.next_row() == sqlite::query::status::row) {
+        assert(qimp_int_fun.column_count() == 3);
+        if (result.comment.empty()) {
+            auto v = qimp_int_fun.get_column(0);
+            if (std::holds_alternative<std::nullptr_t>(v))
+                ;
+            else if (auto p = std::get_if<std::string>(&v))
+                result.comment = std::move(*p);
+            else
+                throw export_import_error{};
+        }
+        auto v = qimp_int_fun.get_column(1);
+        if (std::holds_alternative<std::nullptr_t>(v))
+            ;
+        else if (auto pcmp = std::get_if<std::int64_t>(&v)) {
+            v = qimp_int_fun.get_column(2);
+            if (std::holds_alternative<std::nullptr_t>(v))
+                result.emplace_back(import_msg_integrity(*pcmp), std::nullopt);
+            else if (auto pplus = std::get_if<std::int64_t>(&v))
+                result.emplace_back(import_msg_integrity(*pcmp), import_msg_integrity(*pplus));
+            else
+                throw export_import_error{};
+        } else
+            throw export_import_error{};
+    }
+    return result;
+}
+
+integrity agent::import_msg_integrity(int64_t id)
+{
+    qimp_integrity.start().bind(1, id);
+    integrity::set_t result{};
+    bool row = false;
+    while (qimp_integrity.next_row() == sqlite::query::status::row) {
+        assert(qimp_integrity.column_count() == 2);
+        row = true;
+        auto e = qimp_integrity.get_column(1);
+        if (std::holds_alternative<std::nullptr_t>(e)) {
+            auto u = qimp_integrity.get_column(0);
+            if (auto p = std::get_if<int64_t>(&u)) {
+                if (*p)
+                    return integrity{integrity::universe{}};
+                // not universe => empty set
+            } else
+                throw export_import_error{};
+        } else if (auto p = std::get_if<std::string>(&e)) {
+            result.insert(std::move(*p));
+        } else
+            throw export_import_error{};
+    }
+    if (!row)
+        throw export_import_error{};
+    return integrity{result};
+}
+
+min_integrity agent::import_msg_min_integrity(int64_t id)
+{
+    qimp_min_integrity.start().bind(1, id);
+    min_integrity result{};
+    while (qimp_min_integrity.next_row() == sqlite::query::status::row) {
+        assert(qimp_min_integrity.column_count() ==  1);
+        if (auto v = qimp_min_integrity.get_column(0); auto p = std::get_if<int64_t>(&v))
+            result.push_back(import_msg_integrity(*p));
+        else
+            throw export_import_error{};
+    }
+    return result;
 }
 
 //! The implementation of op_id::no_op
@@ -610,7 +825,7 @@ int cmd_init(std::string_view file)
         R"(create trigger integrity_json_insert instead of insert on integrity_json
             begin
                 insert into integrity_id values (new.id, new.elems == json_quote('universe')) on conflict do nothing;
-                insert into integrity select new.id, e.value from json_each(new.elems) as e;
+                insert into integrity select new.id, e.value from json_each(new.elems) as e where key is not null;
             end)",
         // Insert minimum and maximum integrity
         R"(insert into integrity_json values (0, '[]'), (1, '"universe"'))",
