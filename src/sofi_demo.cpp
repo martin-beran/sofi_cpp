@@ -167,13 +167,15 @@ using acl = soficpp::ops_acl<integrity, operation, verdict>;
 using min_integrity = soficpp::acl<integrity, operation, verdict>;
 
 //! The type an integrity modification function
-using integrity_fun = soficpp::safe_integrity_fun<integrity, operation>;
-
-class integrity_fun_def: public std::vector<std::pair<integrity, std::optional<integrity>>> {
+class integrity_fun: public std::vector<std::pair<integrity, std::optional<integrity>>> {
     //! The base class
     using base_t = std::vector<std::pair<integrity, std::optional<integrity>>>;
     using base_t::base_t;
 public:
+    //! The integrity type
+    using integrity_t = integrity;
+    //! The operation type
+    using operation_t = operation;
     //! Evaluates the integrity function
     /*! It tests \a i against all elements (pairs) in this vector. If \a i is
      * greater or equal to the first integrity in a pair, then then all
@@ -181,15 +183,44 @@ public:
      * the second value in the pair is \c nullopt, then \a i is added to the
      * result.
      * \param[in] i an integrity
-     * \param[in] limit a limit for the result (unused)
+     * \param[in] limit a limit for the result
      * \param[in] op an operation (unused)
      * \return the modified integrity */
-    integrity operator()(const integrity& i, const integrity& limit, const operation& op);
+    integrity operator()(const integrity& i, const integrity& limit, const operation& op) const;
+    //! Gets safety of the function
+    /*! \return always \c true */
+    [[nodiscard]] static constexpr bool safe() noexcept {
+        return true;
+    }
+    //! Gets a function always returning minimum integrity
+    /*! \return the function object */
+    static integrity_fun min() {
+        integrity_fun f{};
+        f.comment = "min";
+        return f;
+    }
+    //! Gets an identity function
+    /*! \return the function object returning the argument \a i limited by \a
+     * limit */
+    static integrity_fun identity() {
+        integrity_fun f{};
+        f.comment = "identity";
+        f.emplace_back(integrity{}, std::nullopt);
+        return f;
+    }
+    //! Gets a function always returning the maximum indentity.
+    /*! \return the function object */
+    static integrity_fun max() {
+        integrity_fun f{};
+        f.comment = "max";
+        f.emplace_back(integrity{}, integrity{integrity::universe{}});
+        return f;
+    }
     //! The comment of the integrity
     std::string comment;
 };
 
-integrity integrity_fun_def::operator()(const integrity& i, const integrity&, const operation&)
+integrity integrity_fun::operator()(const integrity& i, const integrity& limit, const operation&) const
 {
     integrity result{};
     for (auto&& v: *this)
@@ -199,7 +230,7 @@ integrity integrity_fun_def::operator()(const integrity& i, const integrity&, co
              else
                  result = result + i;
          }
-    return result;
+    return result * limit;
 }
 
 //! The entity type
@@ -239,6 +270,29 @@ private:
         //! Creates the exception object.
         export_import_error(): runtime_error("export_import_error") {}
     };
+    //! Exports an integrity to the database
+    /*! \param[in] i an integrity to be exported
+     * \return id of the exported integrity
+     * \throw export_import_error if the integrity cannot be exported */
+    int64_t export_msg_integrity(const integrity& i);
+    //! Exports an ACL to the database
+    /*! \param[in] a the ACL to be exported
+     * \return id of the exported ACL
+     * \throw export_import_error if the ACL cannot be exported */
+    int64_t export_msg_acl(const acl& a);
+    //! Exports an ACL to the database
+    /*! \param[in] a the ACL to be exported
+     * \param[in] op the operation controlled by ACL \a a
+     * \param[in] id if it is not \c std::nullopt, then it is used as the id of the
+     * ACL in the database; if \c std::nullopt, then a new id will be generated
+     * \return id of the exported ACL
+     * \throw export_import_error if the ACL cannot be exported */
+    int64_t export_msg_acl(const acl::acl_t& a, std::optional<op_id> op = {}, std::optional<int64_t> id = {});
+    //! Exports an integrity modification function to the database
+    /*! \param[in] f a function to be exported
+     * \return id of the exported function
+     * \throw export_import_error if the function cannot be exported */
+    int64_t export_msg_int_fun(const integrity_fun& f);
     //! Imports an integrity from the database by id
     /*! \param[in] id the id of the integrity
      * \return the imported integrity
@@ -260,6 +314,12 @@ private:
      * \throw export_import_error if the function cannot be imported */
     integrity_fun import_msg_int_fun(int64_t id);
     sqlite::query qexp_entity; //!< SQL query for exporting an entity
+    sqlite::query qexp_integrity_id; //!< SQL query for inserting into INTEGRITY_ID
+    sqlite::query qexp_integrity; //!< SQL query for inserting into INTEGRITY
+    sqlite::query qexp_acl_id; //!< SQL query for inserting into ACL_ID
+    sqlite::query qexp_acl; //!< SQL query for inserting into ACL
+    sqlite::query qexp_int_fun_id; //!< SQL query for inserting int INT_FUN_ID
+    sqlite::query qexp_int_fun; //!< SQL query for inserting int INT_FUN
     sqlite::query qimp_entity; //!< SQL query for importing an entity
     sqlite::query qimp_integrity; //!< SQL query for importing an integrity
     sqlite::query qimp_min_integrity; //!< SQL query for importing a minimum integrity
@@ -268,7 +328,13 @@ private:
 };
 
 agent::agent(sqlite::connection& db):
-    qexp_entity(db, R"()"),
+    qexp_entity(db, R"(insert or replace into entity values ($1, $2, $3, $4, $t, $6, $7, $8))"),
+    qexp_integrity_id(db, R"(insert into integrity_id select max(id) + 1, $1 from integrity_id returning id)"),
+    qexp_integrity(db, R"(insert into integrity values ($1, $2))"),
+    qexp_acl_id(db, R"(insert into acl_id select max(id) + 1 from acl_id returning id)"),
+    qexp_acl(db, R"(insert into acl values ($1, $2, $3))"),
+    qexp_int_fun_id(db, R"(insert into int_fun_id select max(id) + 1, $1 from int_fun_id returning id)"),
+    qexp_int_fun(db, R"(insert int int_fun values ($1, $2, $3))"),
     qimp_entity(db, R"(
         select name, integrity, min_integrity, access_ctrl, test_fun, prov_fun, recv_fun, data
         from entity where name = $1)"),
@@ -282,14 +348,102 @@ agent::agent(sqlite::connection& db):
 soficpp::agent_result agent::export_msg(const entity_t& e, message_t& m)
 {
     try {
-        (void) e;
-        (void) m;
-        // TODO
+        m = e.name;
+        int64_t id = export_msg_integrity(e.integrity());
+        int64_t min_id = export_msg_acl(e.min_integrity());
+        int64_t access_ctrl = export_msg_acl(e.access_ctrl());
+        int64_t test_fun = export_msg_int_fun(e.test_fun());
+        int64_t prov_fun = export_msg_int_fun(e.prov_fun());
+        int64_t recv_fun = export_msg_int_fun(e.recv_fun());
+        qexp_entity.start().bind(1, e.name).bind(2, id).bind(3, min_id).bind(4, access_ctrl).
+            bind(5, test_fun).bind(6, prov_fun).bind(7, recv_fun).bind(8, e.data).next_row();
     } catch (const sqlite::error& e) {
         std::cerr << e.what();
         return soficpp::agent_result{soficpp::agent_result::error};
     }
     return soficpp::agent_result{soficpp::agent_result::success};
+}
+
+int64_t agent::export_msg_acl(const acl& a)
+{
+    static acl::acl_t null_acl{};
+    int64_t id = export_msg_acl(a.default_op ? *a.default_op : null_acl, std::nullopt, std::nullopt);
+    for (auto&& o: a)
+        export_msg_acl(o.second ? *o.second : null_acl, o.first, id);
+    return id;
+}
+
+int64_t agent::export_msg_acl(const acl::acl_t& a, std::optional<op_id> op, std::optional<int64_t> id)
+{
+    if (!id) {
+        auto ok = qexp_acl_id.start().next_row() == sqlite::query::status::row;
+        assert(ok);
+        assert(qexp_acl_id.column_count() == 1);
+        if (auto v = qexp_acl_id.get_column(0); auto p = std::get_if<int64_t>(&v))
+            id = *p;
+        else
+            throw export_import_error{};
+    }
+    assert(id);
+    if (a.empty()) {
+        qexp_acl.start().bind(1, *id);
+        if (op)
+            qexp_acl.bind(2, soficpp::enum2str(*op));
+        else
+            qexp_acl.bind(2, nullptr);
+        qexp_acl.bind(3, nullptr).next_row();
+    } else
+        for (auto&& i: a) {
+            int64_t integrity_id = export_msg_integrity(i);
+            qexp_acl.start().bind(1, *id);
+            if (op)
+                qexp_acl.bind(2, soficpp::enum2str(*op));
+            else
+                qexp_acl.bind(2, nullptr);
+            qexp_acl.bind(3, integrity_id).next_row();
+        }
+    return *id;
+}
+
+int64_t agent::export_msg_int_fun(const integrity_fun& f)
+{
+    auto ok = qexp_int_fun_id.start().bind(1, f.comment).next_row() == sqlite::query::status::row;
+    assert(ok);
+    assert(qexp_int_fun_id.column_count() == 1);
+    int64_t id = 0;
+    if (auto v = qexp_int_fun_id.get_column(0); auto p = std::get_if<int64_t>(&v))
+        id = *p;
+    else
+        throw export_import_error{};
+    for (auto&& v: f) {
+        int64_t cmp = export_msg_integrity(v.first);
+        qexp_int_fun.start().bind(1, id).bind(2, cmp);
+        if (v.second) {
+            int64_t plus = export_msg_integrity(*v.second);
+            qexp_int_fun.bind(3, plus);
+        } else
+            qexp_int_fun.bind(3, nullptr);
+        qexp_int_fun.next_row();
+    }
+    return id;
+}
+
+int64_t agent::export_msg_integrity(const integrity& i)
+{
+    bool universe = i == integrity{integrity::universe{}};
+    auto ok = qexp_integrity_id.start().bind(1, universe).next_row() == sqlite::query::status::row;
+    assert(ok);
+    assert(qexp_integrity_id.column_count() == 1);
+    int64_t id = 0;
+    if (auto v = qexp_integrity_id.get_column(0); auto p = std::get_if<int64_t>(&v))
+        id = *p;
+    else
+        throw export_import_error{};
+    if (universe)
+        return id;
+    for (auto&& e: std::get<integrity::set_t>(i.value()))
+        qexp_integrity.start().bind(1, id).bind(2, e).next_row();
+    return id;
 }
 
 soficpp::agent_result agent::import_msg(const message_t& m, entity_t& e)
@@ -375,7 +529,7 @@ acl agent::import_msg_acl(int64_t id)
 integrity_fun agent::import_msg_int_fun(int64_t id)
 {
     qimp_int_fun.start().bind(1, id);
-    integrity_fun_def result;
+    integrity_fun result;
     while (qimp_int_fun.next_row() == sqlite::query::status::row) {
         assert(qimp_int_fun.column_count() == 3);
         if (result.comment.empty()) {
@@ -804,7 +958,7 @@ int cmd_init(std::string_view file)
         // INTEGRITY_ID, then the integrity is either the empty set (lattice
         // minimum) or the lattice maximum, depending on INTEGRITY_ID.UNIVERSE.
         R"(create table integrity (
-                id int references integrity_id(id) on delete restrict on update restrict,
+                id int references integrity_id(id) on delete cascade on update cascade,
                 elem text,
                 primary key (id, elem),
                 constraint integrity_elem_not_empty check (elem != '')
@@ -859,7 +1013,7 @@ int cmd_init(std::string_view file)
         // NULL OP) controlling operations without specific entries. Each entry
         // is a (possibly empty, represented by NULL) set of integrities INT_ID. 
         R"(create table acl (
-                id int not null references acl_id(id) on delete restrict on update restrict,
+                id int not null references acl_id(id) on delete cascade on update cascade,
                 op text references operation(name) on delete restrict on update restrict,
                 integrity int references integrity_id(id) on delete restrict on update restrict,
                 unique (id, op, integrity)
@@ -900,10 +1054,9 @@ int cmd_init(std::string_view file)
         // second integrity of a pair is NULL, then all elements of the
         // argument are added to the result.
         R"(create table int_fun (
-                id int not null references int_fun_id(id) on delete restrict on update restrict,
+                id int not null references int_fun_id(id) on delete cascade on update cascade,
                 cmp int not null references integrity_id(id) on delete restrict on update restrict,
-                plus int references integrity_id(id) on delete restrict on update restrict,
-                unique (id, cmp)
+                plus int references integrity_id(id) on delete restrict on update restrict
             ) strict)",
         // Insertable view of table INT_FUN that automatically adds missing
         // function IDs to table INT_FUN_ID

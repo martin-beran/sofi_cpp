@@ -435,7 +435,7 @@ public:
     void safe(bool val) noexcept {
         _safe = val;
     }
-    //! Gets a function always returning minimum identity
+    //! Gets a function always returning minimum integrity
     /*! \return the function object; always safe */
     static dyn_integrity_fun min() {
         dyn_integrity_fun f{[](auto&&, auto&&, auto&&) {
@@ -452,7 +452,7 @@ public:
         f.safe(true);
         return f;
     }
-    //! Gets a function always returning the maximum indentity,
+    //! Gets a function always returning the maximum indentity.
     /*! \return the function object; always safe, returning \a limit */
     static dyn_integrity_fun max() {
         dyn_integrity_fun f{[](auto&&, auto&& limit, auto&&) {
