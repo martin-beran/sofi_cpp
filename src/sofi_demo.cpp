@@ -963,6 +963,7 @@ int cmd_init(std::string_view file)
                 primary key (id, elem),
                 constraint integrity_elem_not_empty check (elem != '')
             ) without rowid, strict)",
+        R"(create index integrity_idx_id on integrity (id))",
         // Insertable JSON view of integrity values stored in table INTEGRITY,
         // one row for each integrity, represented as an (possibly empty) array
         // of strings, or a single string "universe"
@@ -1018,6 +1019,9 @@ int cmd_init(std::string_view file)
                 integrity int references integrity_id(id) on delete restrict on update restrict,
                 unique (id, op, integrity)
             ) strict)",
+        R"(create index acl_idx_id on acl (id))",
+        R"(create index acl_idx_op on acl (op))",
+        R"(create index acl_idx_integrity on acl (integrity))",
         // Insertable view of table ACL that automatically adds missing ACL
         // IDs to table ACL_ID
         R"(create view acl_ins as select * from acl)",
@@ -1058,6 +1062,9 @@ int cmd_init(std::string_view file)
                 cmp int not null references integrity_id(id) on delete restrict on update restrict,
                 plus int references integrity_id(id) on delete restrict on update restrict
             ) strict)",
+        R"(create index int_fun_idx_id on int_fun (id))",
+        R"(create index int_fun_idx_cmp on int_fun (cmp))",
+        R"(create index int_fun_idx_plus on int_fun (plus))",
         // Insertable view of table INT_FUN that automatically adds missing
         // function IDs to table INT_FUN_ID
         R"(create view int_fun_ins as
@@ -1090,6 +1097,12 @@ int cmd_init(std::string_view file)
                 recv_fun int not null references int_fun_id(id) on delete restrict on update restrict,
                 data text default null
             ) without rowid, strict)",
+        R"(create index entity_idx_integrity on entity (integrity))",
+        R"(create index entity_idx_min_integrity on entity (min_integrity))",
+        R"(create index entity_idx_access_ctrl on entity (access_ctrl))",
+        R"(create index entity_idx_test_fun on entity (test_fun))",
+        R"(create index entity_idx_prov_fun on entity (prov_fun))",
+        R"(create index entity_idx_recv_fun on entity (recv_fun))",
         // Table of requested operations. Order of operations is defined by
         // ascending order of IDs. SUBJECT and OBJECT do not use foreign key
         // constraints referencing ENTITY.NAME, because the referenced entities
@@ -1103,6 +1116,7 @@ int cmd_init(std::string_view file)
                 arg text default null,
                 comment text default ''
             ) strict)",
+        R"(create index request_idx_op on request (op))",
         // Table of operation results. Completed operations are moved from
         // REQUEST to RESULT. Columns shared with REQUEST are simply copied.
         // ALLOWED is the SOFI result of the operation. ACCESS is the result of
@@ -1125,6 +1139,7 @@ int cmd_init(std::string_view file)
                 constraint min_bool check (min == false or min == true),
                 constraint error_bool check (error == false or error == true)
             ) strict)",
+        R"(create index result_idx_op on result (op))",
     }) {
         sqlite::query(db, sql).start().next_row();
     }
