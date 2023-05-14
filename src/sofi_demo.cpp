@@ -330,7 +330,7 @@ private:
 };
 
 agent::agent(sqlite::connection& db):
-    qexp_entity(db, R"(insert or replace into entity values ($1, $2, $3, $4, $t, $6, $7, $8))"),
+    qexp_entity(db, R"(insert or replace into entity values ($1, $2, $3, $4, $5, $6, $7, $8))"),
     qexp_integrity_id(db, R"(insert into integrity_id select max(id) + 1, $1 from integrity_id returning id)"),
     qexp_integrity(db, R"(insert into integrity values ($1, $2))"),
     qexp_acl_id(db, R"(insert into acl_id select max(id) + 1 from acl_id returning id)"),
@@ -385,6 +385,7 @@ int64_t agent::export_msg_acl(const acl::acl_t& a, std::optional<op_id> op, std:
             id = *p;
         else
             throw export_import_error{};
+        qexp_acl_id.start(); // no query may be running during transaction commit
     }
     assert(id);
     if (a.empty()) {
@@ -417,6 +418,7 @@ int64_t agent::export_msg_int_fun(const integrity_fun& f)
         id = *p;
     else
         throw export_import_error{};
+    qexp_int_fun_id.start(); // no query may be running during transaction commit
     for (auto&& v: f) {
         int64_t cmp = export_msg_integrity(v.first);
         qexp_int_fun.start().bind(1, id).bind(2, cmp);
@@ -441,6 +443,7 @@ int64_t agent::export_msg_integrity(const integrity& i)
         id = *p;
     else
         throw export_import_error{};
+    qexp_integrity_id.start(); // no query may be running during transaction commit
     if (universe)
         return id;
     for (auto&& e: std::get<integrity::set_t>(i.value()))
@@ -487,6 +490,7 @@ soficpp::agent_result agent::import_msg(const message_t& m, entity_t& e)
             e.data = *p;
         else
             return soficpp::agent_result{soficpp::agent_result::error};
+        qimp_entity.start(); // no query may be running during transaction commit
     } catch (const export_import_error&) {
         return soficpp::agent_result{soficpp::agent_result::error};
     } catch (const sqlite::error& e) {
@@ -504,9 +508,9 @@ acl agent::import_msg_acl(int64_t id)
         assert(qimp_acl.column_count() == 2);
         auto& pacl = [&, this]() -> std::shared_ptr<acl::acl_t>& {
             auto v = qimp_acl.get_column(0);
-            if (std::holds_alternative<std::nullptr_t>(v))
+            if (std::holds_alternative<std::nullptr_t>(v)) {
                 return result.default_op;
-            else if (auto p = std::get_if<std::string>(&v))
+            } else if (auto p = std::get_if<std::string>(&v))
                 try {
                     return result[soficpp::str2enum<op_id>(*p)];
                 } catch (const std::invalid_argument&) {
@@ -572,8 +576,10 @@ integrity agent::import_msg_integrity(int64_t id)
         if (std::holds_alternative<std::nullptr_t>(e)) {
             auto u = qimp_integrity.get_column(0);
             if (auto p = std::get_if<int64_t>(&u)) {
-                if (*p)
+                if (*p) {
+                    qimp_integrity.start(); // no query may be running during transaction commit
                     return integrity{integrity::universe{}};
+                }
                 // not universe => empty set
             } else
                 throw export_import_error{};
@@ -1119,6 +1125,15 @@ int cmd_init(std::string_view file)
                 comment text default ''
             ) strict)",
         R"(create index request_idx_op on request (op))",
+        // Insertable view of table REQUEST that automatically allocates the next ID
+        R"(create view request_ins(subject, object, op, arg, comment) as
+            select subject, object, op, arg, comment from request order by id)",
+        R"(create trigger request_ins_insert instead of insert on request_ins
+            begin
+                insert into request values (
+                    (select coalesce(max(id) + 1, 0) from request),
+                    new.subject, new.object, new.op, new.arg, new.comment);
+            end)",
         // Table of operation results. Completed operations are moved from
         // REQUEST to RESULT. Columns shared with REQUEST are simply copied.
         // ALLOWED is the SOFI result of the operation. ACCESS is the result of
@@ -1165,7 +1180,7 @@ std::deque<op_record> get_op_requests(sqlite::connection& db)
                             R"(select id, subject, object, op, arg, comment from request order by id)"}.start());
          q.next_row() == sqlite::query::status::row;)
     {
-        assert(q.column_count() != 6);
+        assert(q.column_count() == 6);
         op_record op{};
         auto get_val = [&q]<class T>(int i, T& v, bool null = false) {
             auto c = q.get_column(i);
@@ -1219,14 +1234,17 @@ int cmd_run(std::string_view file)
             return EXIT_FAILURE;
         }
         assert(o.subject == subject.name);
+        std::cout << "import subject(" << subject.name << ")=" << subject << std::endl;
         demo::entity object;
         if (!agent.import_msg(o.object, object)) {
             std::cerr << "Cannot import object \"" << o.object << "\"" << std::endl;
             return EXIT_FAILURE;
         }
         assert(o.object == object.name);
+        std::cout << "import object(" << object.name << ")=" << object << std::endl;
         assert(o.op);
         demo::verdict verdict = engine.operation(subject, object, *o.op);
+        std::cout << *o.op << " -> " << verdict << std::endl;
         if (verdict) {
             demo::operation::attach_db(&db);
             o.op->execute(subject, object, o.arg, verdict);
@@ -1236,16 +1254,20 @@ int cmd_run(std::string_view file)
         o.access = verdict.access_test();
         o.min = verdict.min_test();
         o.error = verdict.error;
+        o.destroy = verdict.destroy;
         std::string exported_subject{};
         std::string exported_object{};
+        std::cout << "export subject(" << subject.name << ")=" << subject << std::endl;
         if (!agent.export_msg(subject, exported_subject)) {
             std::cerr << "Cannot export subject \"" << subject.name << "\"" << std::endl;
             return EXIT_FAILURE;
         }
         assert(subject.name == exported_subject);
-        if (o.destroy)
+        if (o.destroy) {
+            std::cout << "destroy object(" << object.name << ')' << std::endl;
             sql_del_entity.start().bind(1, object.name).next_row();
-        else {
+        } else {
+            std::cout << "export object(" << object.name << ")=" << object << std::endl;
             if (!agent.export_msg(object, exported_object)) {
                 std::cerr << "Cannot export object \"" << object.name << "\"" << std::endl;
                 return EXIT_FAILURE;
