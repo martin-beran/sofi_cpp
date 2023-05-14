@@ -34,6 +34,7 @@ foreach (P ${TEST_PROGRAMS})
     add_executable(test_${P} test_${P}.cpp)
     add_test(NAME ${P} COMMAND test_${P})
 endforeach()
+target_link_libraries(test_sofi_demo sqlite_cpp)
 
 if (TEST_COVERAGE)
     add_custom_target(

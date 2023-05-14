@@ -336,13 +336,13 @@ agent::agent(sqlite::connection& db):
     qexp_acl_id(db, R"(insert into acl_id select max(id) + 1 from acl_id returning id)"),
     qexp_acl(db, R"(insert into acl values ($1, $2, $3))"),
     qexp_int_fun_id(db, R"(insert into int_fun_id select max(id) + 1, $1 from int_fun_id returning id)"),
-    qexp_int_fun(db, R"(insert int int_fun values ($1, $2, $3))"),
+    qexp_int_fun(db, R"(insert into int_fun values ($1, $2, $3))"),
     qimp_entity(db, R"(
         select name, integrity, min_integrity, access_ctrl, test_fun, prov_fun, recv_fun, data
         from entity where name = $1)"),
     qimp_integrity(db, R"(select universe, elem from integrity_id left join integrity using (id) where id == $1)"),
     qimp_min_integrity(db, R"(select integrity from min_integrity where id = $1 and integrity is not null)"),
-    qimp_acl(db, R"(select op, integrity fro acl where id = $1)"),
+    qimp_acl(db, R"(select op, integrity from acl where id = $1)"),
     qimp_int_fun(db, R"(select comment, cmp, plus from int_fun_id left join int_fun using (id) where id = $1)")
 {
 }
