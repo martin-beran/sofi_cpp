@@ -18,6 +18,8 @@
  *
  * The database schema is currently documented only by the initialization SQL
  * statements and comments in cmd_init().
+ *
+ * \test in file test_sofi_demo.cpp
  */
 
 #include "soficpp/agent.hpp"

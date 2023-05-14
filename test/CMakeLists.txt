@@ -12,6 +12,7 @@ set(
     entity
     enum_str
     integrity
+    sofi_demo
 )
 
 if (TEST_COVERAGE)

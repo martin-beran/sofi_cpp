@@ -256,8 +256,9 @@ or different types may be used by different threads simultaneously.
 \section Examples Examples and experiments
 
 Some examples how to use the library can be used in test programs in directory
-\link ../test test/\endlink. There is also an experimental a SOFI system in
+\link ../test test/\endlink. There is also an experimental SOFI system in
 program \c sofi_demo, implemented in file sofi_demo.cpp. It uses an SQLite
 database to store a persistent state of the SOFI system, so any SQLite client
-can be used to examine and modify the system by SQL commands.
+can be used to examine and modify the system by SQL commands. Examples of using
+this program can be found in its tests, in file test_sofi_demo.cpp.
 */
