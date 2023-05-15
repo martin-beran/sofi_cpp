@@ -338,7 +338,7 @@ agent::agent(sqlite::connection& db):
     qexp_int_fun_id(db, R"(insert into int_fun_id select max(id) + 1, $1 from int_fun_id returning id)"),
     qexp_int_fun(db, R"(insert into int_fun values ($1, $2, $3))"),
     qimp_entity(db, R"(
-        select name, integrity, min_integrity, access_ctrl, test_fun, prov_fun, recv_fun, data
+        select name, integrity, min_integrity, acl, test_fun, prov_fun, recv_fun, data
         from entity where name = $1)"),
     qimp_integrity(db, R"(select universe, elem from integrity_id left join integrity using (id) where id == $1)"),
     qimp_min_integrity(db, R"(select integrity from min_integrity where id = $1 and integrity is not null)"),
@@ -1043,12 +1043,27 @@ int cmd_init(std::string_view file)
             select acl.id as id , acl.op as op, integrity_json.elems as integrity
             from acl left join integrity_json on acl.integrity = integrity_json.id
             order by id, op)",
+        // Read-only view of ACLs that displays ACLs as lists of integrities in JSON format
+        R"(create view acl_json2(id, op, integrity) as
+            select
+                id, op,
+                case
+                    when integrity is null then json_array()
+                    else json_group_array(json(integrity))
+                end
+            from acl_json group by id, op)",
+        // Read-only view of ACLs that display ACLs as JSON objects
+        R"(create view acl_json3(id, acl) as
+            select id, json_group_object(coalesce(op, ''), json(integrity)) as acl
+            from acl_json2 group by id)",
         // Insert ACLs that deny all operations and allow all operations
         R"(insert into acl_ins values (0, null, null), (1, null, 0))",
         // Read-only view of ACLs that selects values usable as minimum integrity
         R"(create view min_integrity as select id, integrity from acl where op is null)",
         // JSON value of MIN_INTEGRITY
         R"(create view min_integrity_json as select id, integrity from acl_json where op is null)",
+        // Two-level JSON value of MIN_INTEGRITY
+        R"(create view min_integrity_json2 as select id, integrity from acl_json2 where op is null)",
         // Table of IDs of INT_FUN values. This table is needed in order to use
         // integrity function IDs as a foreign key, because a foreign key must
         // be the primary key or have a unique index.
@@ -1099,7 +1114,7 @@ int cmd_init(std::string_view file)
                 name text primary key,
                 integrity int not null references integrity_id(id) on delete restrict on update restrict,
                 min_integrity int not null references acl_id(id) on delete restrict on update restrict,
-                access_ctrl int not null references acl_id(id) on delete restrict on update restrict,
+                acl int not null references acl_id(id) on delete restrict on update restrict,
                 test_fun int not null references int_fun_id(id) on delete restrict on update restrict,
                 prov_fun int not null references int_fun_id(id) on delete restrict on update restrict,
                 recv_fun int not null references int_fun_id(id) on delete restrict on update restrict,
@@ -1107,10 +1122,21 @@ int cmd_init(std::string_view file)
             ) without rowid, strict)",
         R"(create index entity_idx_integrity on entity (integrity))",
         R"(create index entity_idx_min_integrity on entity (min_integrity))",
-        R"(create index entity_idx_access_ctrl on entity (access_ctrl))",
+        R"(create index entity_idx_acl on entity (acl))",
         R"(create index entity_idx_test_fun on entity (test_fun))",
         R"(create index entity_idx_prov_fun on entity (prov_fun))",
         R"(create index entity_idx_recv_fun on entity (recv_fun))",
+        // View of entities with some JSON values
+        R"(create view entity_json as
+            select
+                e.name as name, i.elems as integrity, mi.integrity as min_integrity,
+                a.acl as acl, e.data as data
+            from
+                entity as e
+                join integrity_json as i on e.integrity == i.id
+                join min_integrity_json2 as mi on e.min_integrity == mi.id
+                join acl_json3 as a on e.acl == a.id
+            order by name)",
         // Table of requested operations. Order of operations is defined by
         // ascending order of IDs. SUBJECT and OBJECT do not use foreign key
         // constraints referencing ENTITY.NAME, because the referenced entities
