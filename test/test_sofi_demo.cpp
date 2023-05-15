@@ -254,7 +254,8 @@ std::ostream& operator<<(std::ostream& os, const test_op& v)
 } // namespace
 //! \endcond
 
-/*! \file \c op -- Execution of operations */
+/*! \file
+ * \test \c op -- Execution of operations */
 //! \cond
 BOOST_DATA_TEST_CASE(op, (std::array{
     test_op{"[subj_data]", "[obj_data]", "append_arg", "[argument]", "[subj_data]", "[obj_data][argument]"},
@@ -304,7 +305,8 @@ BOOST_DATA_TEST_CASE(op, (std::array{
 }
 //! \endcond
 
-/*! \file \c op_clone -- Execution of operation \c clone */
+/*! \file
+ * \test \c op_clone -- Execution of operation \c clone */
 //! \cond
 BOOST_AUTO_TEST_CASE(op_clone)
 {
@@ -337,7 +339,8 @@ BOOST_AUTO_TEST_CASE(op_clone)
 }
 //! \endcond
 
-/*! \file \c op_destroy -- Execution of operation \c destroy */
+/*! \file
+ * \test \c op_destroy -- Execution of operation \c destroy */
 //! \cond
 BOOST_AUTO_TEST_CASE(op_destroy)
 {
@@ -369,7 +372,8 @@ BOOST_AUTO_TEST_CASE(op_destroy)
 }
 //! \endcond
 
-/*! \file \c op_set_integrity -- Execution of operation \c set_integrity */
+/*! \file
+ * \test \c op_set_integrity -- Execution of operation \c set_integrity */
 //! \cond
 BOOST_AUTO_TEST_CASE(op_set_integrity)
 {
@@ -411,7 +415,8 @@ BOOST_AUTO_TEST_CASE(op_set_integrity)
 }
 //! \endcond
 
-/*! \file \c op_set_min_integrity -- Execution of operation \c set_min_integrity */
+/*! \file
+ * \test \c op_set_min_integrity -- Execution of operation \c set_min_integrity */
 //! \cond
 BOOST_AUTO_TEST_CASE(op_set_min_integrity)
 {

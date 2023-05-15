@@ -98,7 +98,7 @@ private:
     //! Output of an operation value
     /*! It calls to_string()
      * \param[in] os an output stream
-     * \param[in] i an operation
+     * \param[in] o an operation
      * \return \a os */
     friend std::ostream& operator<<(std::ostream& os, const operation_base& o) {
         os << o.to_string();
