@@ -961,8 +961,8 @@ int cmd_init(std::string_view file)
                 constraint integrity_id_not_negative check (id >= 0),
                 constraint universe_bool check (universe == false or universe == true)
             ))",
-        // Insertable view returning the maximum ID from INTEGRITY. Inserting
-        // into this view inserts into INTEGRITY, inserting NULL generates a
+        // Insertable view returning the maximum ID from INTEGRITY_ID. Inserting
+        // into this view inserts into INTEGRITY_ID, inserting NULL generates a
         // new integrity ID
         R"(create view integrity_id_max(id, universe) as select max(id), null from integrity_id)",
         R"(create trigger integrity_id_max_insert instead of insert on integrity_id_max
@@ -998,7 +998,8 @@ int cmd_init(std::string_view file)
             begin
                 insert into integrity_id_max values (new.id, new.elems == json_quote('universe'));
                 insert into integrity
-                    select (select id from integrity_id_max), value from json_each(new.elems) where key is not null;
+                    select coalesce(new.id, (select id from integrity_id_max)), value
+                    from json_each(new.elems) where key is not null;
             end)",
         // Insert minimum and maximum integrity
         R"(insert into integrity_json values (null, '[]'), (null, '"universe"'))",
@@ -1026,6 +1027,15 @@ int cmd_init(std::string_view file)
                 id integer primary key,
                 constraint acl_id_not_negative check (id >= 0)
             ))",
+        // Insertable view returning the maximum ID from ACL_ID. Inserting into
+        // this view inserts into ACL_ID, inserting NULL generates a new ACL
+        // ID, inserting an existing ID does nothing
+        // "WHERE true" removes a parsing ambiguity reported as a syntax error
+        R"(create view acl_id_max(id) as select max(id) from acl_id)",
+        R"(create trigger acl_id_max_insert instead of insert on acl_id_max
+            begin
+                insert into acl_id select coalesce(new.id, id + 1, 0) from acl_id_max where true on conflict do nothing;
+            end)",
         // Table of ACLs. Rows with the same ID define a single ACL with
         // semantics of soficpp::ops_acl containing soficpp::acl. That is,
         // there is an entry for each operation OP, and a default entry (with
@@ -1045,15 +1055,27 @@ int cmd_init(std::string_view file)
         R"(create view acl_ins as select * from acl)",
         R"(create trigger acl_ins_insert instead of insert on acl_ins
             begin
-                insert into acl_id values (new.id) on conflict do nothing;
-                insert into acl values (new.id, new.op, new.integrity);
+                insert into acl_id_max values (new.id);
+                insert into acl values (coalesce(new.id, (select id from acl_id_max)), new.op, new.integrity);
             end)",
-        // Read-only view of ACLs that displays integrities in JSON format
+        // Insertable view of ACLs that displays integrities in JSON format.
+        // Inserting into this view inserts into ACL, and also to ACL_ID and
+        // INTEGRITY_JSON as needed.
         R"(create view acl_json(id, op, integrity) as
             select acl.id as id , acl.op as op, integrity_json.elems as integrity
             from acl left join integrity_json on acl.integrity = integrity_json.id
             order by id, op)",
-        // Read-only view of ACLs that displays ACLs as lists of integrities in JSON format
+        R"(create trigger acl_json_insert instead of insert on acl_json
+            begin
+                insert into acl_id_max values (new.id);
+                insert into integrity_json select null, new.integrity where new.integrity is not null;
+                insert into acl values (
+                    coalesce(new.id, (select id from acl_id_max)), new.op,
+                    case when new.integrity is null then null else (select id from integrity_id_max) end);
+            end)",
+        // Insertable view of ACLs that displays ACLs as lists of integrities
+        // in JSON format. Inserting into this view inserts into ACL_JSON, and
+        // also to ACL_ID and INTEGRITY_JSON as needed.
         R"(create view acl_json2(id, op, integrity) as
             select
                 id, op,
@@ -1062,12 +1084,34 @@ int cmd_init(std::string_view file)
                     else json_group_array(json(integrity))
                 end
             from acl_json group by id, op)",
-        // Read-only view of ACLs that display ACLs as JSON objects
+        R"(create trigger acl_json2_insert instead of insert on acl_json2
+            begin
+                insert into acl_id_max values (new.id);
+                insert into acl_json
+                    select coalesce(new.id, (select id from acl_id_max)), new.op, null
+                    where json(new.integrity) == json_array();
+                insert into acl_json
+                    select coalesce(new.id, (select id from acl_id_max)), new.op, json_quote(value)
+                    from json_each(new.integrity);
+            end)",
+        // Insertable view of ACLs that display ACLs as JSON objects. Inserting
+        // into this view inserts into ACL_JSON2, and also to ACL_ID and
+        // INTEGRITY_JSON as needed.
         R"(create view acl_json3(id, acl) as
             select id, json_group_object(coalesce(op, ''), json(integrity)) as acl
             from acl_json2 group by id)",
+        R"(create trigger acl_json3_insert instead of insert on acl_json3
+            begin
+                insert into acl_id_max values (new.id);
+                insert into acl_json2
+                    select
+                        coalesce(new.id, (select id from acl_id_max)),
+                        case key when '' then null else key end,
+                        value
+                    from json_each(new.acl);
+            end)",
         // Insert ACLs that deny all operations and allow all operations
-        R"(insert into acl_ins values (0, null, null), (1, null, 0))",
+        R"(insert into acl_json3 values (null, '{"":[]}'), (null, '{"":[[]]}'))",
         // Read-only view of ACLs that selects values usable as minimum integrity
         R"(create view min_integrity as select id, integrity from acl where op is null)",
         // JSON value of MIN_INTEGRITY

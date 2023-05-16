@@ -179,11 +179,11 @@ sql_grp var()
 {
     sql_grp grp{.name = "var", .sql = {
         R"(create)"s + use_tmp_tbl() + R"(table if not exists var (name text, value))"s,
-        R"(insert into var select 'integrity_empty', id from integrity_json where elems = '[]')"s,
-        R"(insert into var select 'integrity_universe', id from integrity_json where elems = '"universe"')"s,
-        R"(insert into var select distinct 'min_int_any', id from min_integrity_json where integrity = '[]')"s,
-        R"(insert into var select distinct 'acl_allow', id from acl_json where op is null and integrity = '[]')"s,
-        R"(insert into var select 'fun_identity', id from int_fun_id where comment = 'identity')"s,
+        R"(insert into var select 'integrity_empty', id from integrity_json where elems = '[]' limit 1)"s,
+        R"(insert into var select 'integrity_universe', id from integrity_json where elems = '"universe"' limit 1)"s,
+        R"(insert into var select 'min_int_any', id from min_integrity_json where integrity = '[]' limit 1)"s,
+        R"(insert into var select 'acl_allow', id from acl_json where op is null and integrity = '[]' limit 1)"s,
+        R"(insert into var select 'fun_identity', id from int_fun_id where comment = 'identity' limit 1)"s,
     }};
     return grp;
 }
