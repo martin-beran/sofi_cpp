@@ -1183,13 +1183,16 @@ int cmd_init(std::string_view file)
         // View of entities with some JSON values
         R"(create view entity_json as
             select
-                e.name as name, i.elems as integrity, mi.integrity as min_integrity,
-                a.acl as acl, e.data as data
+                e.name as name, i.elems as integrity, mi.integrity as min_integrity, a.acl as acl,
+                tf.comment as test_fun, pf.comment as prov_fun, rf.comment as recv_fun, e.data as data
             from
                 entity as e
                 join integrity_json as i on e.integrity == i.id
                 join min_integrity_json2 as mi on e.min_integrity == mi.id
                 join acl_json3 as a on e.acl == a.id
+                join int_fun_id as tf on e.test_fun = tf.id
+                join int_fun_id as pf on e.prov_fun = pf.id
+                join int_fun_id as rf on e.recv_fun = rf.id
             order by name)",
         // Table of requested operations. Order of operations is defined by
         // ascending order of IDs. SUBJECT and OBJECT do not use foreign key
