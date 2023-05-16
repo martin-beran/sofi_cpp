@@ -974,7 +974,9 @@ int cmd_init(std::string_view file)
         R"(create index integrity_idx_id on integrity (id))",
         // Insertable JSON view of integrity values stored in table INTEGRITY,
         // one row for each integrity, represented as an (possibly empty) array
-        // of strings, or a single string "universe"
+        // of strings, or a single string "universe". The inserting view
+        // generates a new ID if NULL is passed as ID. It also stores ID of the
+        // inserted integrity into table INTEGRITY_LAST_ID.
         R"(create view integrity_json(id, elems) as
             select
                 id,
@@ -985,13 +987,20 @@ int cmd_init(std::string_view file)
                     else json_array()
                 end
             from integrity_id as iid)",
+        R"(create table integrity_last_id (id int))",
         R"(create trigger integrity_json_insert instead of insert on integrity_json
             begin
-                insert into integrity_id values (new.id, new.elems == json_quote('universe')) on conflict do nothing;
-                insert into integrity select new.id, e.value from json_each(new.elems) as e where key is not null;
+                delete from integrity_last_id;
+                insert into integrity_last_id
+                    select coalesce(new.id, max(id) + 1, 0) from integrity_id;
+                insert into integrity_id
+                    values ((select id from integrity_last_id), new.elems == json_quote('universe'))
+                    on conflict do nothing;
+                insert into integrity
+                    select (select id from integrity_last_id), value from json_each(new.elems) where key is not null;
             end)",
         // Insert minimum and maximum integrity
-        R"(insert into integrity_json values (0, '[]'), (1, '"universe"'))",
+        R"(insert into integrity_json values (null, '[]'), (null, '"universe"'))",
         // Table of operation definitions, identified by operation NAME. It
         // must be kept in sync with enum demo::op_id and with related
         // operation classes.
