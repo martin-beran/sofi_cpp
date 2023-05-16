@@ -961,6 +961,14 @@ int cmd_init(std::string_view file)
                 constraint integrity_id_not_negative check (id >= 0),
                 constraint universe_bool check (universe == false or universe == true)
             ))",
+        // Insertable view returning the maximum ID from INTEGRITY. Inserting
+        // into this view inserts into INTEGRITY, inserting NULL generates a
+        // new integrity ID
+        R"(create view integrity_id_max(id, universe) as select max(id), null from integrity_id)",
+        R"(create trigger integrity_id_max_insert instead of insert on integrity_id_max
+            begin
+                insert into integrity_id select coalesce(new.id, id + 1, 0), new.universe from integrity_id_max;
+            end)",
         // Table of integrity values. Rows with the same ID define a single
         // integrity. If there is no row in INTEGRITY for an ID from
         // INTEGRITY_ID, then the integrity is either the empty set (lattice
@@ -975,8 +983,7 @@ int cmd_init(std::string_view file)
         // Insertable JSON view of integrity values stored in table INTEGRITY,
         // one row for each integrity, represented as an (possibly empty) array
         // of strings, or a single string "universe". The inserting view
-        // generates a new ID if NULL is passed as ID. It also stores ID of the
-        // inserted integrity into table INTEGRITY_LAST_ID.
+        // generates a new ID if NULL is passed as ID.
         R"(create view integrity_json(id, elems) as
             select
                 id,
@@ -987,17 +994,11 @@ int cmd_init(std::string_view file)
                     else json_array()
                 end
             from integrity_id as iid)",
-        R"(create table integrity_last_id (id int))",
         R"(create trigger integrity_json_insert instead of insert on integrity_json
             begin
-                delete from integrity_last_id;
-                insert into integrity_last_id
-                    select coalesce(new.id, max(id) + 1, 0) from integrity_id;
-                insert into integrity_id
-                    values ((select id from integrity_last_id), new.elems == json_quote('universe'))
-                    on conflict do nothing;
+                insert into integrity_id_max values (new.id, new.elems == json_quote('universe'));
                 insert into integrity
-                    select (select id from integrity_last_id), value from json_each(new.elems) where key is not null;
+                    select (select id from integrity_id_max), value from json_each(new.elems) where key is not null;
             end)",
         // Insert minimum and maximum integrity
         R"(insert into integrity_json values (null, '[]'), (null, '"universe"'))",
