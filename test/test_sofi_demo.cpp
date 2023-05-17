@@ -181,9 +181,12 @@ sql_grp var()
         R"(create)"s + use_tmp_tbl() + R"(table if not exists var (name text, value))"s,
         R"(insert into var select 'integrity_empty', id from integrity_json where elems = '[]' limit 1)"s,
         R"(insert into var select 'integrity_universe', id from integrity_json where elems = '"universe"' limit 1)"s,
-        R"(insert into var select 'min_int_any', id from min_integrity_json where integrity = '[]' limit 1)"s,
-        R"(insert into var select 'acl_allow', id from acl_json where op is null and integrity = '[]' limit 1)"s,
+        R"(insert into var select 'min_int_any', id from min_integrity_json2 where integrity = '[[]]' limit 1)"s,
+        R"(insert into var select 'acl_allow', id from acl_json3 where acl = '{"":[[]]}' limit 1)"s,
+        R"(insert into var select 'acl_deny', id from acl_json3 where acl = '{"":[]}' limit 1)"s,
+        R"(insert into var select 'fun_min', id from int_fun_id where comment = 'min' limit 1)"s,
         R"(insert into var select 'fun_identity', id from int_fun_id where comment = 'identity' limit 1)"s,
+        R"(insert into var select 'fun_max', id from int_fun_id where comment = 'max' limit 1)"s,
     }};
     return grp;
 }
@@ -191,6 +194,11 @@ sql_grp var()
 std::string var(const std::string& name)
 {
     return R"((select value from var where name=')"s + name + "')";
+}
+
+std::string var(const std::string& name, const std::string& value_sql)
+{
+    return R"(insert into var values (')" + name + R"(', ()" + value_sql + R"()))";
 }
 
 } // namespace query
@@ -462,5 +470,163 @@ BOOST_AUTO_TEST_CASE(op_set_min_integrity)
             }},
         },
     }.run();
+}
+
+namespace {
+
+struct test_op_acl {
+    std::string subj_int1;
+    std::string subj_min1;
+    std::string obj_int1;
+    std::string obj_min1;
+    std::string acl;
+    std::string op;
+    bool allowed;
+    bool access;
+    bool min;
+    std::string subj_int2;
+    std::string obj_int2;
+};
+
+std::ostream& operator<<(std::ostream& os, const test_op_acl& v)
+{
+    os << "{subj=" << v.subj_int1 << "/" << v.subj_min1 << " obj=" << v.obj_int1 << "/" << v.obj_min1 <<
+        " -> " << v.op << "/" << v.acl << " -> allowed=" << v.allowed << " access=" << v.access << " min=" << v.min <<
+        " subj=" << v.subj_int2 << " obj=" << v.obj_int2 << "}";
+    return os;
+}
+
+void run_test(const test_op_acl& sample)
+{
+    auto var_int = [](auto&& name, auto&& value) {
+        return sql_grp{.name = name, .sql = {
+            R"(insert into integrity_json values (null, ')" + value + R"('))",
+            query::var(name, R"(select id from integrity_id_max)"),
+        }};
+    };
+    auto var_min = [](auto&& name, auto&& value) {
+        return sql_grp{.name = name, .sql = {
+            R"(insert into acl_json2 values (null, null, ')" + value + R"('))",
+            query::var(name, R"(select id from acl_id_max)"),
+        }};
+    };
+    sofi_test{
+        .sql_prepare = {
+            query::var(),
+            var_int("subj_int1", sample.subj_int1),
+            var_min("subj_min1", sample.subj_min1),
+            var_int("obj_int1", sample.obj_int1),
+            var_min("obj_min1", sample.obj_min1),
+            { "acls", {
+                R"(insert into acl_json3 values (null, ')" + sample.acl + R"('))",
+                query::var("acl", R"(select id from acl_id_max)"),
+            }},
+            { "entities", {
+                R"(insert into entity values ('subject', )"s +
+                    query::var("subj_int1") + R"(, )"s + query::var("subj_min1") + R"(, )"s +
+                    query::var("acl_deny") + R"(, )"s + query::var("fun_identity") + R"(, )"s +
+                    query::var("fun_min") + R"(, )"s + query::var("fun_max") + R"(, 'subj_data'))"s,
+                R"(insert into entity values ('object', )"s +
+                    query::var("obj_int1") + R"(, )"s + query::var("obj_min1") + R"(, )"s +
+                    query::var("acl") + R"(, )"s + query::var("fun_identity") + R"(, )"s +
+                    query::var("fun_min") + R"(, )"s + query::var("fun_max") + R"(, 'obj_data'))"s,
+            }},
+            { "requests", {
+                R"(insert into request_ins values
+                    ('subject', 'object', ')"s + sample.op + R"(', 'arg', ''))"s,
+            }},
+        },
+        .sql_check = {
+            { "op_result", {
+                R"(select
+                        subject == 'subject' and object == 'object' and op == ')"s + sample.op + R"(' and
+                        )" + (sample.allowed ? "" : "not ") + R"(allowed and
+                        )" + (sample.access ? "" : "not ") + R"(access and
+                        )" + (sample.min ? "" : "not ") + R"(min and not error
+                    from result where id == 0)",
+                R"(select i.elems == ')"s + sample.subj_int2 + R"('
+                    from entity as e join integrity_json as i on e.integrity == i.id
+                    where e.name == 'subject')"s,
+                R"(select i.elems == ')"s + sample.obj_int2 + R"('
+                    from entity as e join integrity_json as i on e.integrity == i.id
+                    where e.name == 'object')"s,
+            }},
+        },
+    }.run();
+}
+
+} // namespace
+//! \endcond
+
+/*! \file
+ * \test \c op_allowed -- Operation allowed */
+//! \cond
+BOOST_DATA_TEST_CASE(op_allowed, (std::array{
+    // no-flow, universe integrity, ACL allows all
+    test_op_acl{.subj_int1 = R"("universe")", .subj_min1 = R"([[]])",
+        .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(no_op)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"("universe")", .obj_int2 = R"("universe")"},
+    // read, universe integrity, ACL allows all
+    test_op_acl{.subj_int1 = R"("universe")", .subj_min1 = R"([[]])",
+        .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"("universe")", .obj_int2 = R"("universe")"},
+    // write, universe integrity, ACL allows all
+    test_op_acl{.subj_int1 = R"("universe")", .subj_min1 = R"([[]])",
+        .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"("universe")", .obj_int2 = R"("universe")"},
+    // read-write, universe integrity, ACL allows all
+    test_op_acl{.subj_int1 = R"("universe")", .subj_min1 = R"([[]])",
+        .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(swap)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"("universe")", .obj_int2 = R"("universe")"},
+    // TODO
+}))
+{
+    run_test(sample);
+}
+//! \endcond
+
+/*! \file
+ * \test \c op_denied_access -- Operation denied by access test */
+//! \cond
+BOOST_DATA_TEST_CASE(op_denied_access, (std::array{
+    // minimum integrity, ACL requires greater than minimum
+    test_op_acl{.subj_int1 = R"([])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[["i1"]]})",
+        .op = R"(no_op)", .allowed = false, .access = false, .min = false,
+        .subj_int2 = R"([])", .obj_int2 = R"("universe")"},
+    // TODO
+}))
+{
+    run_test(sample);
+}
+//! \endcond
+
+/*! \file
+ * \test \c op_denied_min -- Operation denied by minimum integrity test */
+//! \cond
+BOOST_DATA_TEST_CASE(op_denied_min, (std::array{
+    // read, ACL allows all
+    test_op_acl{.subj_int1 = R"(["subj"])", .subj_min1 = R"([["subj"]])",
+        .obj_int1 = R"(["obj"])", .obj_min1 = R"([["obj"]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = false, .access = true, .min = false,
+        .subj_int2 = R"(["subj"])", .obj_int2 = R"(["obj"])"},
+    // write, ACL allows all
+    test_op_acl{.subj_int1 = R"(["subj"])", .subj_min1 = R"([["subj"]])",
+        .obj_int1 = R"(["obj"])", .obj_min1 = R"([["obj"]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = false, .access = true, .min = false,
+        .subj_int2 = R"(["subj"])", .obj_int2 = R"(["obj"])"},
+    // read-write, ACL allows all
+    test_op_acl{.subj_int1 = R"(["subj"])", .subj_min1 = R"([["subj"]])",
+        .obj_int1 = R"(["obj"])", .obj_min1 = R"([["obj"]])", .acl = R"({"":[[]]})",
+        .op = R"(swap)", .allowed = false, .access = true, .min = false,
+        .subj_int2 = R"(["subj"])", .obj_int2 = R"(["obj"])"},
+    // TODO
+}))
+{
+    run_test(sample);
 }
 //! \endcond

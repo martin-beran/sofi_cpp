@@ -140,7 +140,7 @@ template <class T> concept verdict =
         v.min_test(test);
     };
 
-//! A simple verdict class that stores only the arguments of access_check() and min_check().
+//! A simple verdict class that stores only the arguments of access_test() and min_test().
 /*! It satisfies concept soficpp::verdict.
  * \test in file test_entity.cpp */
 class simple_verdict {
