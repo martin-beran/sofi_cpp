@@ -4,6 +4,7 @@
 
 #include <concepts>
 #include <functional>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -81,6 +82,28 @@ public:
     [[nodiscard]] virtual std::string_view name() const {
         return {};
     }
+    //! Converts the value to a string.
+    /*! \return the string representation of operation name and read/write kind */
+    [[nodiscard]] std::string to_string() const {
+        std::string result{name()};
+        result += '{';
+        if (is_read())
+            result += 'r';
+        if (is_write())
+            result += 'w';
+        result += '}';
+        return result;
+    }
+private:
+    //! Output of an operation value
+    /*! It calls to_string()
+     * \param[in] os an output stream
+     * \param[in] o an operation
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const operation_base& o) {
+        os << o.to_string();
+        return os;
+    }
 };
 
 namespace impl {
@@ -117,7 +140,7 @@ template <class T> concept verdict =
         v.min_test(test);
     };
 
-//! A simple verdict class that stores only the arguments of access_check() and min_check().
+//! A simple verdict class that stores only the arguments of access_test() and min_test().
 /*! It satisfies concept soficpp::verdict.
  * \test in file test_entity.cpp */
 class simple_verdict {
@@ -125,7 +148,8 @@ public:
     //! Default constructor, initializes the verdict to denied.
     explicit constexpr simple_verdict() = default;
     //! Gets the stored verdict.
-    /*! \return the verdict */
+    /*! It returns the same value as allowed().
+     * \return the verdict */
     explicit constexpr operator bool() const {
         return allowed();
     }
@@ -154,11 +178,27 @@ public:
     bool min_test() const noexcept {
         return _min;
     }
+    //! Converts the value to a string.
+    /*! \return a string containing values of allowed(), access_test(),
+     * min_test() */
+    [[nodiscard]] std::string to_string() const {
+        return "{allowed=" + std::to_string(allowed()) + ",access=" + std::to_string(access_test()) +
+            ",min=" + std::to_string(min_test()) + "}";
+    }
 private:
     //! The stored result of evaluation of an access_controller
     bool _access: 1 = false;
     //! The stored result of evaluation of a minimum integrity test
     bool _min: 1 = false;
+    //! Output of a verdict
+    /*! It calls to_string()
+     * \param[in] os an output stream
+     * \param[in] v a verdict
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const simple_verdict& v) {
+        os << v.to_string();
+        return os;
+    }
 };
 
 static_assert(verdict<simple_verdict>);
@@ -230,8 +270,25 @@ public:
     {
         return subj >= integrity;
     }
+    //! Converts the value to a string.
+    /*! \return a string representation of this acl */
+    [[nodiscard]] std::string to_string() const {
+        std::ostringstream os;
+        os << *this;
+        return os.str();
+    }
     //! The integrity used by test()
     integrity_t integrity{};
+private:
+    //! Output of an ACL
+    /*! It writes the same value as to_string().
+     * \param[in] os an output stream
+     * \param[in] a an ACL
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const acl_single& a) {
+        os << a.integrity;
+        return os;
+    }
 };
 
 static_assert(access_controller<acl_single<integrity_single, operation_base<impl::operation_base_dummy_id>,
@@ -278,8 +335,33 @@ public:
                 return true;
         return false;
     }
+    //! Converts the value to a string.
+    /*! \return a string representation of this acl */
+    [[nodiscard]] std::string to_string() const {
+        std::ostringstream os;
+        os << *this;
+        return os.str();
+    }
 private:
     using container_t::container_t;
+    //! Output of an ACL
+    /*! It writes the same value as to_string()
+     * \param[in] os an output stream
+     * \param[in] a an ACL
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const acl& a) {
+        os << '{';
+        bool first = true;
+        for (auto&& i: a) {
+            if (first)
+                first = false;
+            else
+                os << ',';
+            os << i;
+        }
+        os << '}';
+        return os;
+    }
 };
 
 static_assert(access_controller<acl<integrity_single, operation_base<impl::operation_base_dummy_id>, simple_verdict>>);
@@ -346,10 +428,45 @@ public:
                 return false;
         }
     }
+    //! Converts the value to a string.
+    /*! \return a string representation of this acl */
+    [[nodiscard]] std::string to_string() const {
+        std::ostringstream os;
+        os << *this;
+        return os.str();
+    }
     //! The ACL used for operations not found in the operation-specific ACLs
     std::shared_ptr<acl_t> default_op{};
 private:
     using map_t::map_t;
+    //! Output of an ACL
+    /*! It writes the same value as to_string()
+     * \param[in] os an output stream
+     * \param[in] a an ACL
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const ops_acl& a) {
+        auto out = [&](const std::shared_ptr<acl_t>& p) {
+            if (p)
+                os << *p;
+            else
+                os << "null";
+        };
+        os << '{';
+        out(a.default_op);
+        for (auto&& v: a) {
+            os << ',';
+            if constexpr (requires { os << v.first; })
+                os << v.first;
+            else if constexpr (requires { enum2str(v.first); })
+                os << enum2str(v.first);
+            else
+                os << "?";
+            os << '=';
+            out(v.second);
+        }
+        os << '}';
+        return os;
+    }
 };
 
 static_assert(access_controller<ops_acl<integrity_single, operation_base<impl::operation_base_dummy_id>,
@@ -434,7 +551,7 @@ public:
     void safe(bool val) noexcept {
         _safe = val;
     }
-    //! Gets a function always returning minimum identity
+    //! Gets a function always returning minimum integrity
     /*! \return the function object; always safe */
     static dyn_integrity_fun min() {
         dyn_integrity_fun f{[](auto&&, auto&&, auto&&) {
@@ -451,7 +568,7 @@ public:
         f.safe(true);
         return f;
     }
-    //! Gets a function always returning the maximum indentity,
+    //! Gets a function always returning the maximum indentity.
     /*! \return the function object; always safe, returning \a limit */
     static dyn_integrity_fun max() {
         dyn_integrity_fun f{[](auto&&, auto&& limit, auto&&) {
@@ -721,6 +838,13 @@ public:
     [[nodiscard]] F& recv_fun() noexcept {
         return _recv_fun;
     }
+    //! Converts the value to a string.
+    /*! \return a string representation of this entity */
+    [[nodiscard]] std::string to_string() const {
+        std::ostringstream os;
+        os << *this;
+        return os.str();
+    }
 private:
     //! The current integrity
     integrity_t _integrity = integrity_t::min();
@@ -734,6 +858,22 @@ private:
     integrity_fun_t _prov_fun = F::min();
     //! The integrity receiving function
     integrity_fun_t _recv_fun = F::min();
+    //! Output of an entity
+    /*! It writes the same value as to_string().
+     * \param[in] os an output stream
+     * \param[in] e an entity
+     * \return \a os */
+    friend std::ostream& operator<<(std::ostream& os, const basic_entity& e) {
+        os << "{int=" << e._integrity << ",min=" << e._min_integrity << ",acl=" << e._access_ctrl;
+        if constexpr (requires { os << e._test_fun; })
+            os << ",test=" << e._test_fun;
+        if constexpr (requires { os << e._prov_fun; })
+            os << ",prov=" << e._prov_fun;
+        if constexpr (requires { os << e._recv_fun; })
+            os << ",recv=" << e._recv_fun;
+        os << '}';
+        return os;
+    }
 };
 
 static_assert(entity<basic_entity<

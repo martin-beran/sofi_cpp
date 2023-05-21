@@ -119,6 +119,7 @@ add_compile_options(-UNDEBUG)
 # Used packages
 find_package(Boost 1.81 REQUIRED) # Set BOOST_ROOT for an alternative location
 find_package(Doxygen 1.9.3 OPTIONAL_COMPONENTS dot)
+find_package(SQLite3 3.37 REQUIRED)
 find_package(Threads REQUIRED)
 
 include_directories(

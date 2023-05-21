@@ -6,11 +6,11 @@
  * This header should be included by each program that uses the library.
  */
 
-#include "soficpp/enum_str.hpp"
-#include "soficpp/agent.hpp"
-#include "soficpp/engine.hpp"
-#include "soficpp/entity.hpp"
-#include "soficpp/integrity.hpp"
+#include "enum_str.hpp"
+#include "agent.hpp"
+#include "engine.hpp"
+#include "entity.hpp"
+#include "integrity.hpp"
 
 //! The top-level namespace of the SOFI C++ library
 namespace soficpp {

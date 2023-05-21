@@ -6,7 +6,7 @@
  * \test in file test_integrity.cpp
  */
 
-#include "soficpp/enum_str.hpp"
+#include "enum_str.hpp"
 
 #include <algorithm>
 #include <bitset>
