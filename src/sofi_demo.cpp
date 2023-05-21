@@ -226,12 +226,12 @@ integrity integrity_fun::operator()(const integrity& i, const integrity& limit, 
 {
     integrity result{};
     for (auto&& v: *this)
-         if (v.first <= i) {
-             if (v.second)
-                 result = result + *v.second;
-             else
-                 result = result + i;
-         }
+        if (v.first <= i) {
+            if (v.second)
+                result = result + *v.second;
+            else
+                result = result + i;
+        }
     return result * limit;
 }
 
@@ -242,6 +242,12 @@ public:
     std::string name{};
     //! Data of the entity, usable in operations
     std::string data{};
+    //! The name of the integrity testing function
+    std::string test_fun_name{};
+    //! The name of the integrity providing function
+    std::string prov_fun_name{};
+    //! The name of the integrity receiving function
+    std::string recv_fun_name{};
 };
 
 //! The agent class that exports to and imports from the database
@@ -312,9 +318,9 @@ private:
     acl import_msg_acl(int64_t id);
     //! Imports an integrity modification function from the database by id
     /*! \param[in] id the id of the function
-     * \return the imported function
+     * \return the imported function and its comment
      * \throw export_import_error if the function cannot be imported */
-    integrity_fun import_msg_int_fun(int64_t id);
+    std::pair<integrity_fun, std::string> import_msg_int_fun(int64_t id);
     sqlite::query qexp_entity; //!< SQL query for exporting an entity
     sqlite::query qexp_integrity_id; //!< SQL query for inserting into INTEGRITY_ID
     sqlite::query qexp_integrity; //!< SQL query for inserting into INTEGRITY
@@ -475,15 +481,15 @@ soficpp::agent_result agent::import_msg(const message_t& m, entity_t& e)
         else
             return soficpp::agent_result{soficpp::agent_result::error};
         if (auto v = qimp_entity.get_column(4); auto p = std::get_if<int64_t>(&v))
-            e.test_fun() = import_msg_int_fun(*p);
+            std::tie(e.test_fun(), e.test_fun_name) = import_msg_int_fun(*p);
         else
             return soficpp::agent_result{soficpp::agent_result::error};
         if (auto v = qimp_entity.get_column(5); auto p = std::get_if<int64_t>(&v))
-            e.prov_fun() = import_msg_int_fun(*p);
+            std::tie(e.prov_fun(), e.prov_fun_name) = import_msg_int_fun(*p);
         else
             return soficpp::agent_result{soficpp::agent_result::error};
         if (auto v = qimp_entity.get_column(6); auto p = std::get_if<int64_t>(&v))
-            e.recv_fun() = import_msg_int_fun(*p);
+            std::tie(e.recv_fun(), e.recv_fun_name) = import_msg_int_fun(*p);
         else
             return soficpp::agent_result{soficpp::agent_result::error};
         if (auto v = qimp_entity.get_column(7); auto p = std::get_if<std::string>(&v))
@@ -532,7 +538,7 @@ acl agent::import_msg_acl(int64_t id)
     return result;
 }
 
-integrity_fun agent::import_msg_int_fun(int64_t id)
+std::pair<integrity_fun, std::string> agent::import_msg_int_fun(int64_t id)
 {
     qimp_int_fun.start().bind(1, id);
     integrity_fun result;
@@ -547,21 +553,21 @@ integrity_fun agent::import_msg_int_fun(int64_t id)
             else
                 throw export_import_error{};
         }
-        auto v = qimp_int_fun.get_column(1);
-        if (std::holds_alternative<std::nullptr_t>(v))
+        auto vcmp = qimp_int_fun.get_column(1);
+        if (std::holds_alternative<std::nullptr_t>(vcmp))
             ;
-        else if (auto pcmp = std::get_if<std::int64_t>(&v)) {
-            v = qimp_int_fun.get_column(2);
-            if (std::holds_alternative<std::nullptr_t>(v))
+        else if (auto pcmp = std::get_if<std::int64_t>(&vcmp)) {
+            auto vplus = qimp_int_fun.get_column(2);
+            if (std::holds_alternative<std::nullptr_t>(vplus))
                 result.emplace_back(import_msg_integrity(*pcmp), std::nullopt);
-            else if (auto pplus = std::get_if<std::int64_t>(&v))
+            else if (auto pplus = std::get_if<std::int64_t>(&vplus))
                 result.emplace_back(import_msg_integrity(*pcmp), import_msg_integrity(*pplus));
             else
                 throw export_import_error{};
         } else
             throw export_import_error{};
     }
-    return result;
+    return {result, result.comment};
 }
 
 integrity agent::import_msg_integrity(int64_t id)
@@ -1126,6 +1132,16 @@ int cmd_init(std::string_view file)
                 comment text default '',
                 constraint int_fun_id_not_negative check (id >= 0)
             ))",
+        // Insertable view returning the maximum ID from INT_FUN_ID. Inserting
+        // into this view inserts into INT_FUN_ID, inserting ID=NULL generates
+        // a new function ID.
+        R"(create view int_fun_id_max(id, comment) as select max(id), null from int_fun_id)",
+        R"(create trigger int_fun_id_max_insert instead of insert on int_fun_id_max
+            begin
+                insert into int_fun_id
+                    select coalesce(new.id, id + 1, 0), new.comment
+                    from int_fun_id_max where true on conflict do nothing;
+            end)",
         // Table of integrity modification functions, usable as test, providing,
         // and receiving functions of entities. Each function is a set of pairs
         // of integrities. When evaluating a function, the integrity passed as
@@ -1149,10 +1165,12 @@ int cmd_init(std::string_view file)
             from int_fun_id as fi join int_fun as f using (id))",
         R"(create trigger int_fun_ins_insert instead of insert on int_fun_ins
             begin
-                insert into int_fun_id values (new.id, new.comment) on conflict do nothing;
-                insert into int_fun values (new.id, new.cmp, new.plus);
+                insert into int_fun_id_max values (new.id, new.comment);
+                insert into int_fun values (coalesce(new.id, (select id from int_fun_id_max)), new.cmp, new.plus);
             end)",
-        // Read-only view of int_fun that displays integrities in JSON format
+        // Insertable view of int_fun that displays integrities in JSON format.
+        // Inserting into this view inserts into INT_FUN, and also to
+        // INT_FUN_ID and INTEGRITY_JSON as needed.
         R"(create view int_fun_json(id, cmp, plus, comment) as
             select f.id, c.elems, a.elems, fi.comment
             from
@@ -1161,8 +1179,19 @@ int cmd_init(std::string_view file)
                 left join integrity_json as c on f.cmp == c.id
                 left join integrity_json as a on f.plus == a.id
             order by f.id)",
+        R"(create trigger int_fun_json_insert instead of insert on int_fun_json
+            begin
+                insert into integrity_json select null, new.cmp;
+                insert into integrity_json select null, new.plus where new.plus is not null;
+                insert into int_fun_ins values (
+                    new.id,
+                    (select case when new.plus is not null then id - 1 else id end from integrity_id_max),
+                    case when new.plus is not null then (select id from integrity_id_max) else null end,
+                    new.comment);
+            end)",
         // Insert a minimum integrity, identity, and maximum integrity functions
-        R"(insert into int_fun_ins values (0, 0, 0, 'min'), (1, 0, null, 'identity'), (2, 0, 1, 'max'))",
+        R"(insert into int_fun_json values
+            (null, '[]', '[]', 'min'), (null, '[]', null, 'identity'), (null, '[]', '"universe"', 'max'))",
         // Table of entities. DATA can be used (read and written) by implementations
         R"(create table entity (
                 name text primary key,
@@ -1317,14 +1346,16 @@ int cmd_run(std::string_view file)
             return EXIT_FAILURE;
         }
         assert(o.subject == subject.name);
-        std::cout << "import subject(" << subject.name << ")=" << subject << std::endl;
+        std::cout << "import subject(" << subject.name << ")=" << subject << " test=" << subject.test_fun_name <<
+            " prov=" << subject.prov_fun_name << " recv=" << subject.recv_fun_name << std::endl;
         demo::entity object;
         if (!agent.import_msg(o.object, object)) {
             std::cerr << "Cannot import object \"" << o.object << "\"" << std::endl;
             return EXIT_FAILURE;
         }
         assert(o.object == object.name);
-        std::cout << "import object(" << object.name << ")=" << object << std::endl;
+        std::cout << "import object(" << object.name << ")=" << object << " test=" << object.test_fun_name <<
+            " prov=" << object.prov_fun_name << " recv=" << object.recv_fun_name << std::endl;
         assert(o.op);
         demo::verdict verdict = engine.operation(subject, object, *o.op);
         std::cout << *o.op << " -> " << verdict << std::endl;

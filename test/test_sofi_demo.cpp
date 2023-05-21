@@ -175,22 +175,6 @@ std::string use_tmp_tbl()
         return " ";
 }
 
-sql_grp var()
-{
-    sql_grp grp{.name = "var", .sql = {
-        R"(create)"s + use_tmp_tbl() + R"(table if not exists var (name text, value))"s,
-        R"(insert into var select 'integrity_empty', id from integrity_json where elems = '[]' limit 1)"s,
-        R"(insert into var select 'integrity_universe', id from integrity_json where elems = '"universe"' limit 1)"s,
-        R"(insert into var select 'min_int_any', id from min_integrity_json2 where integrity = '[[]]' limit 1)"s,
-        R"(insert into var select 'acl_allow', id from acl_json3 where acl = '{"":[[]]}' limit 1)"s,
-        R"(insert into var select 'acl_deny', id from acl_json3 where acl = '{"":[]}' limit 1)"s,
-        R"(insert into var select 'fun_min', id from int_fun_id where comment = 'min' limit 1)"s,
-        R"(insert into var select 'fun_identity', id from int_fun_id where comment = 'identity' limit 1)"s,
-        R"(insert into var select 'fun_max', id from int_fun_id where comment = 'max' limit 1)"s,
-    }};
-    return grp;
-}
-
 std::string var(const std::string& name)
 {
     return R"((select value from var where name=')"s + name + "')";
@@ -198,7 +182,24 @@ std::string var(const std::string& name)
 
 std::string var(const std::string& name, const std::string& value_sql)
 {
-    return R"(insert into var values (')" + name + R"(', ()" + value_sql + R"()))";
+    return R"(insert or replace into var values (')" + name + R"(', ()" + value_sql + R"()))";
+}
+
+sql_grp var()
+{
+    sql_grp grp{.name = "var", .sql = {
+        R"(drop table if exists var)",
+        R"(create)"s + use_tmp_tbl() + R"(table if not exists var (name text primary key, value))"s,
+        var("integrity_empty", R"(select id from integrity_json where elems = '[]' limit 1)"),
+        var("integrity_universe", R"(select id from integrity_json where elems = '"universe"' limit 1)"),
+        var("min_int_any", R"(select id from min_integrity_json2 where integrity = '[[]]' limit 1)"),
+        var("acl_allow", R"(select id from acl_json3 where acl = '{"":[[]]}' limit 1)"),
+        var("acl_deny", R"(select id from acl_json3 where acl = '{"":[]}' limit 1)"),
+        var("fun_min", R"(select id from int_fun_id where comment = 'min' limit 1)"),
+        var("fun_identity", R"(select id from int_fun_id where comment = 'identity' limit 1)"),
+        var("fun_max", R"(select id from int_fun_id where comment = 'max' limit 1)"),
+    }};
+    return grp;
 }
 
 } // namespace query
@@ -282,12 +283,12 @@ BOOST_DATA_TEST_CASE(op, (std::array{
                 R"(insert into entity values ('subject', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") +
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") +
                     R"(, ')" + sample.before_subj + R"('))",
                 R"(insert into entity values ('object', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") +
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") +
                     R"(, ')" + sample.before_obj + R"('))",
             }},
             { "requests", {
@@ -325,11 +326,11 @@ BOOST_AUTO_TEST_CASE(op_clone)
                 R"(insert into entity values ('subject', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[subj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[subj_data]'))",
                 R"(insert into entity values ('object', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[obj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[obj_data]'))",
             }},
             { "requests", {
                 R"(insert into request_ins values ('subject', 'object', 'clone', 'copy_of_object', ''))",
@@ -359,11 +360,11 @@ BOOST_AUTO_TEST_CASE(op_destroy)
                 R"(insert into entity values ('subject', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[subj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[subj_data]'))",
                 R"(insert into entity values ('object', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[obj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[obj_data]'))",
             }},
             { "requests", {
                 R"(insert into request_ins values ('subject', 'object', 'destroy', '', ''))",
@@ -392,11 +393,11 @@ BOOST_AUTO_TEST_CASE(op_set_integrity)
                 R"(insert into entity values ('subject', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[subj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[subj_data]'))",
                 R"(insert into entity values ('object', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[obj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[obj_data]'))",
             }},
             { "requests", {
                 R"(insert into request_ins values ('subject', 'object', 'set_integrity', '["changed_integrity"]', ''))",
@@ -435,11 +436,11 @@ BOOST_AUTO_TEST_CASE(op_set_min_integrity)
                 R"(insert into entity values ('subject', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[subj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[subj_data]'))",
                 R"(insert into entity values ('object', )"s +
                     query::var("integrity_universe") + R"(, )"s + query::var("min_int_any") + R"(, )" +
                     query::var("acl_allow") + R"(, )" + query::var("fun_identity") + R"(, )" +
-                    query::var("fun_identity") + R"(, )" + query::var("fun_identity") + R"(, '[obj_data]'))",
+                    query::var("fun_min") + R"(, )" + query::var("fun_max") + R"(, '[obj_data]'))",
             }},
             { "requests", {
                 R"(insert into request_ins values
@@ -486,6 +487,7 @@ struct test_op_acl {
     bool min;
     std::string subj_int2;
     std::string obj_int2;
+    std::vector<std::string> fun;
 };
 
 std::ostream& operator<<(std::ostream& os, const test_op_acl& v)
@@ -521,15 +523,24 @@ void run_test(const test_op_acl& sample)
                 R"(insert into acl_json3 values (null, ')" + sample.acl + R"('))",
                 query::var("acl", R"(select id from acl_id_max)"),
             }},
+            { "default_fun", {
+                query::var("subj_test_fun", R"(select id from int_fun_id where comment == 'identity')"),
+                query::var("subj_prov_fun", R"(select id from int_fun_id where comment == 'min')"),
+                query::var("subj_recv_fun", R"(select id from int_fun_id where comment == 'max')"),
+                query::var("obj_test_fun", R"(select id from int_fun_id where comment == 'identity')"),
+                query::var("obj_prov_fun", R"(select id from int_fun_id where comment == 'min')"),
+                query::var("obj_recv_fun", R"(select id from int_fun_id where comment == 'max')"),
+            }},
+            { "fun", sample.fun },
             { "entities", {
                 R"(insert into entity values ('subject', )"s +
                     query::var("subj_int1") + R"(, )"s + query::var("subj_min1") + R"(, )"s +
-                    query::var("acl_deny") + R"(, )"s + query::var("fun_identity") + R"(, )"s +
-                    query::var("fun_min") + R"(, )"s + query::var("fun_max") + R"(, 'subj_data'))"s,
+                    query::var("acl_deny") + R"(, )"s + query::var("subj_test_fun") + R"(, )"s +
+                    query::var("subj_prov_fun") + R"(, )"s + query::var("subj_recv_fun") + R"(, 'subj_data'))"s,
                 R"(insert into entity values ('object', )"s +
                     query::var("obj_int1") + R"(, )"s + query::var("obj_min1") + R"(, )"s +
-                    query::var("acl") + R"(, )"s + query::var("fun_identity") + R"(, )"s +
-                    query::var("fun_min") + R"(, )"s + query::var("fun_max") + R"(, 'obj_data'))"s,
+                    query::var("acl") + R"(, )"s + query::var("obj_test_fun") + R"(, )"s +
+                    query::var("obj_prov_fun") + R"(, )"s + query::var("obj_recv_fun") + R"(, 'obj_data'))"s,
             }},
             { "requests", {
                 R"(insert into request_ins values
@@ -582,7 +593,21 @@ BOOST_DATA_TEST_CASE(op_allowed, (std::array{
         .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
         .op = R"(swap)", .allowed = true, .access = true, .min = true,
         .subj_int2 = R"("universe")", .obj_int2 = R"("universe")"},
-    // TODO
+    // non-universe integrity
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2", "i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2"])", .obj_int2 = R"(["i2","i3"])"},
+    // default operation ACL
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2", "i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[["i1"], ["i2","i3"]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2"])"},
+    // specific operation ACL
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2", "i3"])", .obj_min1 = R"([[]])", .acl = R"({"":["universe"],"read":[["i2"]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2"])", .obj_int2 = R"(["i2","i3"])"},
 }))
 {
     run_test(sample);
@@ -598,7 +623,16 @@ BOOST_DATA_TEST_CASE(op_denied_access, (std::array{
         .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[["i1"]]})",
         .op = R"(no_op)", .allowed = false, .access = false, .min = false,
         .subj_int2 = R"([])", .obj_int2 = R"("universe")"},
-    // TODO
+    // greater than minimum integrity, ACL requires even greater
+    test_op_acl{.subj_int1 = R"(["i1"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[["i1","i2"]]})",
+        .op = R"(no_op)", .allowed = false, .access = false, .min = false,
+        .subj_int2 = R"(["i1"])", .obj_int2 = R"("universe")"},
+    // denied by ACL for a non-default op, while default op ACL would allow it
+    test_op_acl{.subj_int1 = R"(["i1"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"("universe")", .obj_min1 = R"([[]])", .acl = R"({"":[["i1"],["i2"]],"read":[["i1","i2"]]})",
+        .op = R"(read)", .allowed = false, .access = false, .min = false,
+        .subj_int2 = R"(["i1"])", .obj_int2 = R"("universe")"},
 }))
 {
     run_test(sample);
@@ -624,7 +658,258 @@ BOOST_DATA_TEST_CASE(op_denied_min, (std::array{
         .obj_int1 = R"(["obj"])", .obj_min1 = R"([["obj"]])", .acl = R"({"":[[]]})",
         .op = R"(swap)", .allowed = false, .access = true, .min = false,
         .subj_int2 = R"(["subj"])", .obj_int2 = R"(["obj"])"},
-    // TODO
+    // minimum integrity less than the current integrity
+    test_op_acl{.subj_int1 = R"(["s1","s2","s3"])", .subj_min1 = R"([["s1","s2"], ["s1","s3"],["s2","s3"]])",
+        .obj_int1 = R"(["s3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = false, .access = true, .min = false,
+        .subj_int2 = R"(["s1","s2","s3"])", .obj_int2 = R"(["s3"])"},
+}))
+{
+    run_test(sample);
+}
+//! \endcond
+
+/*! \file
+ * \test \c op_integrity_after -- Operation allowed, integrity of the
+ * destination entity is modified appropriately, integrity of the source
+ * integrity is unchanged (if it is not also a reader) */
+//! \cond
+BOOST_DATA_TEST_CASE(op_integrity_after, (std::array{
+    // no-flow, no source/destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(no_op)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2","i3"])"},
+    // read, subject is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2"])", .obj_int2 = R"(["i2","i3"])"},
+    // write, object is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2"])"},
+    // read-write, subject and object are both destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(swap)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2"])", .obj_int2 = R"(["i2"])"},
+}))
+{
+    run_test(sample);
+}
+//! \endcond
+
+/*! \file
+ * \test \c op_test_fun -- Modification of destination entity integrity obeys
+ * the integrity test function. */
+//! \cond
+BOOST_DATA_TEST_CASE(op_test_fun, (std::array{
+    // read, subject is destination, test returns "universe" => no modification
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            query::var("subj_test_fun", R"(select id from int_fun_id where comment == 'max')"),
+        },
+    },
+    // write, object is destination, test returns "universe" => no modification
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            query::var("obj_test_fun", R"(select id from int_fun_id where comment == 'max')"),
+        },
+    },
+    // read, subject is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '[]', null, 'test_fun'))",
+            query::var("subj_test_fun", R"(select id from int_fun_id where comment == 'test_fun')"),
+            R"(insert into int_fun_json
+                values ()" + query::var("subj_test_fun") + R"(, '["i4"]', '["i1"]', 'test_fun'))",
+        },
+    },
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3","i4"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2","i3","i4"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '[]', null, 'test_fun'))",
+            query::var("subj_test_fun", R"(select id from int_fun_id where comment == 'test_fun')"),
+            R"(insert into int_fun_json
+                values ()" + query::var("subj_test_fun") + R"(, '["i4"]', '["i1"]', 'test_fun'))",
+        },
+    },
+    // write, object is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '[]', null, 'test_fun'))",
+            query::var("obj_test_fun", R"(select id from int_fun_id where comment == 'test_fun')"),
+            R"(insert into int_fun_json
+                values ()" + query::var("obj_test_fun") + R"(, '["i4"]', '["i3"]', 'test_fun'))",
+        },
+    },
+    test_op_acl{.subj_int1 = R"(["i1","i2","i4"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2","i4"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '[]', null, 'test_fun'))",
+            query::var("obj_test_fun", R"(select id from int_fun_id where comment == 'test_fun')"),
+            R"(insert into int_fun_json
+                values ()" + query::var("obj_test_fun") + R"(, '["i4"]', '["i3"]', 'test_fun'))",
+        },
+    },
+}))
+{
+    run_test(sample);
+}
+//! \endcond
+
+/*! \file
+ * \test \c op_prov_fun -- Modification of destination entity integrity obeys
+ * the integrity providing function. */
+//! \cond
+BOOST_DATA_TEST_CASE(op_prov_fun, (std::array{
+    // read, subject is destination, prov returns "universe" => provide source integrity
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2","i3"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            query::var("obj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+        },
+    },
+    // write, object is destination, prov returns "universe" => provide source integrity
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i1","i2"])",
+        .fun = {
+            query::var("subj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+        },
+    },
+    // read, subject is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i3"]', 'prov_fun'))",
+            query::var("obj_prov_fun", R"(select id from int_fun_id where comment == 'prov_fun')"),
+        },
+    },
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3","i4"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2","i3"])", .obj_int2 = R"(["i2","i3","i4"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i3"]', 'prov_fun'))",
+            query::var("obj_prov_fun", R"(select id from int_fun_id where comment == 'prov_fun')"),
+        },
+    },
+    // write, object is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i1"]', 'prov_fun'))",
+            query::var("subj_prov_fun", R"(select id from int_fun_id where comment == 'prov_fun')"),
+        },
+    },
+    test_op_acl{.subj_int1 = R"(["i1","i2","i4"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2","i4"])", .obj_int2 = R"(["i1","i2"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i1"]', 'prov_fun'))",
+            query::var("subj_prov_fun", R"(select id from int_fun_id where comment == 'prov_fun')"),
+        },
+    },
+}))
+{
+    run_test(sample);
+}
+//! \endcond
+
+/*! \file
+ * \test \c op_recv_fun -- Modification of destination entity integrity obeys
+ * the integrity receiving function. */
+//! \cond
+BOOST_DATA_TEST_CASE(op_recv_fun, (std::array{
+    // read, subject is destination, recv returns "universe" => receive result of providing function
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2","i3"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            query::var("obj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+            query::var("subj_recv_fun", R"(select id from int_fun_id where comment == 'max')"),
+        },
+    },
+    // write, object is destination, recv returns "universe" => receive result of providing function
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i1","i2"])",
+        .fun = {
+            query::var("subj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+            query::var("obj_recv_fun", R"(select id from int_fun_id where comment == 'max')"),
+        },
+    },
+    // read, subject is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2"])", .obj_int2 = R"(["i2","i3"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i3"]', 'recv_fun'))",
+            query::var("obj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+            query::var("subj_recv_fun", R"(select id from int_fun_id where comment == 'recv_fun')"),
+        },
+    },
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3","i4"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(read)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i2","i3"])", .obj_int2 = R"(["i2","i3","i4"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i3"]', 'recv_fun'))",
+            query::var("obj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+            query::var("subj_recv_fun", R"(select id from int_fun_id where comment == 'recv_fun')"),
+        },
+    },
+    // write, object is destination
+    test_op_acl{.subj_int1 = R"(["i1","i2"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2"])", .obj_int2 = R"(["i2"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i1"]', 'recv_fun'))",
+            query::var("subj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+            query::var("obj_recv_fun", R"(select id from int_fun_id where comment == 'recv_fun')"),
+        },
+    },
+    test_op_acl{.subj_int1 = R"(["i1","i2","i4"])", .subj_min1 = R"([[]])",
+        .obj_int1 = R"(["i2","i3"])", .obj_min1 = R"([[]])", .acl = R"({"":[[]]})",
+        .op = R"(write)", .allowed = true, .access = true, .min = true,
+        .subj_int2 = R"(["i1","i2","i4"])", .obj_int2 = R"(["i1","i2"])",
+        .fun = {
+            R"(insert into int_fun_json values (null, '["i4"]', '["i1"]', 'recv_fun'))",
+            query::var("subj_prov_fun", R"(select id from int_fun_id where comment == 'max')"),
+            query::var("obj_recv_fun", R"(select id from int_fun_id where comment == 'recv_fun')"),
+        },
+    },
 }))
 {
     run_test(sample);
